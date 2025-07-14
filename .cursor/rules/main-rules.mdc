@@ -1,0 +1,77 @@
+---
+alwaysApply: true
+---
+```
+
+1. **Obey Directives, No Extraneous Output**
+
+   * Follow every instruction exactly.
+   * When modifying or creating source files, **output the file content only**—no explanations, comments, or chat text.
+
+2. **CLI Discipline**
+
+   * Prior to running any shell command, output
+
+     ```bash
+     dir
+     ```
+
+     so the working directory context is visible.
+   * After the `dir` listing, run the intended command(s).
+
+3. **Front-End / Back-End Separation**
+
+   * Maintain distinct folder roots:
+
+     * `frontend/` for React + Chakra UI code
+     * `backend/`  for Laravel API
+   * Never intermingle assets or configs across these directories.
+
+4. **Reusable, Dynamic UI Components**
+
+   * Encapsulate each React component in its own file under `frontend/src/components/`.
+   * Accept props for all configurable data (text, colors, variants, callbacks).
+   * Export components as **named exports** and ensure they are theme-aware (use Chakra tokens).
+   * Update shared variants in one place (e.g. a `components/index.ts`) so changes propagate everywhere.
+
+5. **Logging & Monitoring Hooks**
+
+   * Insert meaningful log statements at start/finish of every critical function, including parameters and results.
+   * Use PSR-3 (`Log::info`, `Log::warning`, `Log::error`) on the back-end; `console.debug/info/warn/error` on the front-end.
+
+6. **Post-Coding Deliverables**
+
+   * When coding stops, output a **Markdown summary file** (`SUMMARY.md`) containing:
+
+     1. **What was built/modified** (by file).
+     2. **Testing Guide** – step-by-step to verify functionality locally (commands, URLs, expected results).
+   * After `SUMMARY.md`,in the conversation insert a line of 107 dashes:
+
+     ```
+     -----------------------------------------------------------------------------------------------------------
+     ```
+   * Beneath the dashes, write a **conversation summary** (plain text) describing high-level decisions, trade-offs, and next steps.
+
+7. **Git Hygiene**
+
+   * Commit logically grouped changes with descriptive messages.
+   * Prefix commit messages with `[FE]` or `[BE]` to signal front-end or back-end work.
+
+8. **No Live Services in MVP**
+
+   * Exclude email, SMS, and payment integrations until explicitly re-scoped.
+
+9. **Testing First**
+
+   * Write automated tests (PHPUnit, Jest/RTL) alongside new features whenever feasible.
+
+10. **Version & Dependency Control**
+
+    * Pin package versions in `package.json` and `composer.json`.
+    * Document any non-trivial install steps in `README.md`.
+
+11. **Additional rules**
+
+    * Always use commands for powershell in windows .
+    * Always read @task.md frequently and updae it also to keep track of where we are .
+    * Always push to master in the repo https://github.com/berserker-glitch/reser .
