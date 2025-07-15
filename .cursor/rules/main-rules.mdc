@@ -74,4 +74,321 @@ alwaysApply: true
 
     * Always use commands for powershell in windows .
     * Always read @task.md frequently and updae it also to keep track of where we are .
-    * Always push to master in the repo https://github.com/berserker-glitch/reser .
+    * always respect the original prompt below 
+
+
+```xml
+<prompt>
+  <!-- ========================================================= -->
+  <!--  HIGH-LEVEL MVP / PROBLEM STATEMENT                      -->
+  <!-- ========================================================= -->
+  <overview>
+    We are building an **MVP Salon Reservation System** for single-location Moroccan hair salons.  
+    *Goals*  
+    1.  Owners manage employees, working hours, services and reservations (CRUD).  
+    2.  Clients register / log in, pick services, select (optional) employee, and choose the **nearest** free slot.  
+    3.  The system automatically blocks Moroccan public holidays.  
+    4.  No pre-payments, email or SMS in this MVP.  
+    5.  Stack: **Laravel 10 (API-only) + MySQL 8 + React / TypeScript + Chakra UI**.  
+  </overview>
+
+  <!-- ========================================================= -->
+  <!--  PHASE-BY-PHASE IMPLEMENTATION PLAN                      -->
+  <!-- ========================================================= -->
+  <phases>
+
+    <!-- ---------------- PHASE 0: PROJECT BOOTSTRAP ----------- -->
+    <phase index="0" title="Project bootstrap">
+      <tasks>
+        <task>Init Git repo + set up ESLint/Prettier (front) & Laravel Pint (back).</task>
+        <task>Front-end:  
+          <code lang="bash">
+            pnpm create vite@latest salon-mvp --template react-ts
+            cd salon-mvp &amp;&amp; pnpm i @chakra-ui/react @chakra-ui/icons @emotion/react @emotion/styled framer-motion react-hook-form yup @tanstack/react-query axios zustand date-fns
+          </code>
+        </task>
+        <task>Back-end:  
+          <code lang="bash">
+            composer create-project laravel/laravel salon-api && cd salon-api
+            composer require tymon/jwt-auth spatie/laravel-schedule-monitor laravel-ide-helper
+          </code>
+        </task>
+        <task>Enable CORS (`fruitcake/laravel-cors` is built-in from Laravel 10).</task>
+      </tasks>
+    </phase>
+
+    <!-- -------------- PHASE 1: DATABASE & MODELS ------------- -->
+    <phase index="1" title="Database schema & Eloquent models">
+      <sqlSchema><![CDATA[
+CREATE TABLE users (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  role          ENUM('OWNER','CLIENT') NOT NULL DEFAULT 'CLIENT',
+  full_name     VARCHAR(120)           NOT NULL,
+  email         VARCHAR(120)           NOT NULL UNIQUE,
+  phone         VARCHAR(40),
+  password      VARCHAR(255)           NOT NULL,
+  created_at    TIMESTAMP,
+  updated_at    TIMESTAMP
+);
+
+CREATE TABLE employees (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     BIGINT UNSIGNED NOT NULL,                 -- FK users(id) (owner only adds)
+  full_name   VARCHAR(120)   NOT NULL,
+  phone       VARCHAR(40),
+  note        TEXT,
+  created_at  TIMESTAMP,
+  updated_at  TIMESTAMP
+);
+
+CREATE TABLE services (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(120) NOT NULL,
+  description TEXT,
+  duration_min SMALLINT UNSIGNED NOT NULL DEFAULT 30,
+  price_dhs    DECIMAL(8,2) NOT NULL,                  -- display only
+  created_at  TIMESTAMP,
+  updated_at  TIMESTAMP
+);
+
+CREATE TABLE employee_service (
+  employee_id BIGINT UNSIGNED NOT NULL,
+  service_id  BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY(employee_id, service_id)
+);
+
+CREATE TABLE working_hours (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  employee_id  BIGINT UNSIGNED,
+  weekday      TINYINT UNSIGNED NOT NULL,              -- 0=Sun … 6=Sat
+  start_time   TIME          NOT NULL,
+  end_time     TIME          NOT NULL,
+  break_start  TIME          NULL,
+  break_end    TIME          NULL
+);
+
+CREATE TABLE reservations (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  client_id     BIGINT UNSIGNED NOT NULL,              -- FK users(id)
+  employee_id   BIGINT UNSIGNED NOT NULL,
+  service_id    BIGINT UNSIGNED NOT NULL,
+  start_at      DATETIME      NOT NULL,
+  end_at        DATETIME      NOT NULL,
+  status        ENUM('REQUESTED','CONFIRMED','CANCELLED','COMPLETED') DEFAULT 'CONFIRMED',
+  created_at    TIMESTAMP,
+  updated_at    TIMESTAMP
+);
+
+CREATE TABLE holidays (
+  id        DATE PRIMARY KEY,
+  name      VARCHAR(180)
+);
+      ]]></sqlSchema>
+
+      <tasks>
+        <task>Create matching Eloquent models with `$fillable` props and relationships. Use `HasManyThrough` for employee ↔ reservations.</task>
+        <task>Seed `holidays` via a console command (see Phase 3).</task>
+      </tasks>
+    </phase>
+
+    <!-- -------------- PHASE 2: AUTH & ROUTING ---------------- -->
+    <phase index="2" title="JWT Auth + Route structure">
+      <packages>
+        tymon/jwt-auth: "^2.0"
+      </packages>
+      <tasks>
+        <task>Publish jwt config (`php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"`).</task>
+        <task>Add `AuthController` endpoints:
+          <inOut>
+            POST /api/auth/register → body { full_name, email, password, phone?, role? } → 201 {token}.  
+            POST /api/auth/login    → body { email, password } → 200 {token}.  
+            POST /api/auth/logout   → header Bearer token → 200 {message}.
+          </inOut>
+        </task>
+        <task>Group protected routes under `auth:api` middleware.</task>
+      </tasks>
+      <logging>Log every login attempt & JWT invalidation: use Laravel’s Log facade at `info` level.</logging>
+    </phase>
+
+    <!-- -------------- PHASE 3: HOLIDAY & SCHEDULE LOGIC ------ -->
+    <phase index="3" title="Holiday import & availability engine">
+      <externalAPI name="Nager.Date">
+        URL: https://date.nager.at/api/v3/PublicHolidays/{YEAR}/MA  
+        <example><![CDATA[
+# app/Console/Commands/ImportHolidays.php
+public function handle()
+{
+    $year = now()->year;
+    $url  = "https://date.nager.at/api/v3/PublicHolidays/{$year}/MA";
+    $holidays = Http::get($url)->throw()->json();
+
+    foreach ($holidays as $h) {
+        Holiday::updateOrCreate(
+            ['id' => $h['date']],               // date string YYYY-MM-DD
+            ['name' => $h['localName']]
+        );
+    }
+    Log::info("Imported", ['count' => count($holidays)]);
+}
+        ]]></example>
+      </externalAPI>
+
+      <tasks>
+        <task>Schedule this command yearly on Dec 31; register in `app/Console/Kernel`:</task>
+        <code lang="php">
+$schedule->command('holidays:import')->yearly()->on('31-12', '23:30');
+        </code>
+      </tasks>
+
+      <pseudocode title="Check availability given requested slot">
+        <![CDATA[
+function isSlotAvailable(employeeId, dateTimeStart, duration):
+    if dateTimeStart.date in holidays: return false
+    workHours = WorkingHour.where(employeeId, weekday=dateTimeStart.weekday)
+    if dateTimeStart.time < workHours.start or (dateTimeStart+duration) > workHours.end:
+        return false
+    overlap = Reservation.where(employeeId)
+                .whereBetween(dateTimeStart, dateTimeStart+duration)
+    return overlap.isEmpty()
+        ]]>
+      </pseudocode>
+    </phase>
+
+    <!-- -------------- PHASE 4: RESERVATION ENDPOINTS --------- -->
+    <phase index="4" title="Reservation CRUD + business rules">
+      <interfaceFirst>
+        <endpoint path="/api/availability" method="GET">
+          <query>
+            service_id (number, required)  
+            employee_id (number, optional)  
+            date (YYYY-MM-DD, optional defaults today)
+          </query>
+          <response 200>
+            {
+              "slots":[ "2025-07-29T09:00", "2025-07-29T09:30", ... ]
+            }
+          </response>
+        </endpoint>
+
+        <endpoint path="/api/reservations" method="POST">
+          <body>
+            {
+              "service_id": 1,
+              "employee_id": 3,  // may be null
+              "start_at": "2025-07-29T10:00"
+            }
+          </body>
+          <response 201>
+            { "id":123, "status":"CONFIRMED" }
+          </response>
+        </endpoint>
+      </interfaceFirst>
+
+      <logging>
+        - Log `info` on reservation creation with client_id, employee_id, start_at.  
+        - Log `warning` on rejected request with reason (holiday, conflict, outside work hours).
+      </logging>
+    </phase>
+
+    <!-- -------------- PHASE 5: FRONTEND FLOW ----------------- -->
+    <phase index="5" title="React front-end booking wizard">
+      <stateDiagram format="mermaid">
+        <![CDATA[
+stateDiagram-v2
+  [*] --> ChooseService
+  ChooseService --> ChooseEmployee : optional selection
+  ChooseEmployee --> ChooseDateTime
+  ChooseDateTime --> ReviewConfirm
+  ReviewConfirm --> Success
+  Success --> [*]
+        ]]>
+      </stateDiagram>
+
+      <pseudocode>
+        <![CDATA[
+useForm(); useQueryClient();
+
+Step1_SelectService:
+  register('serviceId')
+Step2_Employee:
+  fetch employees for service (GET /employees?service=serviceId)
+Step3_DateTime:
+  call /availability with serviceId + employeeId (optional)
+  <Calendar> disable holidays + fully booked slots
+
+onSubmit:
+  mutate POST /reservations
+  onSuccess => navigate('/success/:id')
+        ]]>
+      </pseudocode>
+
+      <exampleCode lang="tsx"><![CDATA[
+const { control, handleSubmit } = useForm<BookingDto>();
+const { mutate, isLoading } = useMutation(createReservation, {
+  onSuccess: (data) => {
+    toast({
+      title: 'Booking confirmed',
+      description: `Ref #${data.id}`,
+      status: 'success'
+    });
+    navigate(`/booking/${data.id}`);
+  },
+  onError: (e: AxiosError) => toast({
+    title: 'Unable to book',
+    description: e.response?.data?.message ?? 'Try another slot',
+    status: 'error'
+  })
+});
+      ]]></exampleCode>
+
+      <packages>
+        react-hook-form, zustand (global auth state), @tanstack/react-query (data caching), date-fns, chakra-dayzed-datepicker or react-day-picker, axios.
+      </packages>
+    </phase>
+  </phases>
+
+  <!-- ========================================================= -->
+  <!--  INPUT / OUTPUT CONTRACT DEFINITIONS                     -->
+  <!-- ========================================================= -->
+  <contracts>
+
+    <!-- DTOs used across API and front-end -->
+    <dto name="Service">
+      id: number  
+      name: string  
+      duration_min: number  
+      price_dhs: number  
+      description: string
+    </dto>
+
+    <dto name="Employee">
+      id: number  
+      full_name: string  
+      specialties: Service[]  <!-- joined -->
+    </dto>
+
+    <dto name="Reservation">
+      id: number  
+      client_id: number  
+      employee_id: number  
+      service_id: number  
+      start_at: ISODateString  
+      end_at: ISODateString  
+      status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+    </dto>
+
+  </contracts>
+
+  <!-- ========================================================= -->
+  <!--  LOGGING GUIDELINES                                      -->
+  <!-- ========================================================= -->
+  <loggingGuidelines>
+    Use PSR-3 log levels:  
+    • **info** – Successful auth and reservation creation.  
+    • **warning** – Business rule violations (double-booking, holiday).  
+    • **error** – Unhandled exceptions; include stack trace.  
+    Prefix with request ID (generate UUID in a middleware and push to `Log::withContext`).  
+  </loggingGuidelines>
+
+</prompt>
+```
