@@ -25,7 +25,7 @@ const DraggableNavItem: React.FC<DraggableNavItemProps> = ({
   item,
   isSelected,
   onClick,
-  index,
+  index: _index,
 }) => {
   const {
     attributes,
