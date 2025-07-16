@@ -1,0 +1,156 @@
+// == Cursor AI Coding Standards ==
+// Applies to all projects using MUI, React, TypeScript, Laravel, and SQLite/PHP
+
+---
+
+# Architecture & Design
+- Always design for scalability: define clear system boundaries, data flow, and component relationships before coding.
+- Enforce strict separation of concerns: maintain distinct folder roots for frontend and backend code and never intermingle assets or configs.
+- Plan for future growth: design APIs and databases to handle increased load and new features.
+- Use established design patterns (Repository, Factory, Strategy, etc.) where appropriate.
+- Document all architectural decisions and trade-offs as you go (ADR format recommended).
+
+# Code & Database Consistency
+- Keep database schema and application code in sync at all times. If you change a migration, update all related models, services, and queries immediately.
+- After any schema change, review all code that interacts with affected tables for compatibility.
+- Write and run integration tests after every schema change to catch mismatches early.
+
+# Feature Completeness
+- Always implement both admin and client flows as required by the product. Never ship an MVP with only one user type unless explicitly scoped.
+- Validate that all critical user journeys (e.g., booking, authentication, admin management) are present and testable end-to-end.
+- Use checklists to ensure no required flows are omitted.
+
+# Code Organization
+- Use a clear, modular file structure for frontend and backend.
+- Group related files (components, hooks, types) together by feature.
+- Use index files for cleaner imports.
+- Separate business logic from UI components.
+- Use meaningful naming conventions: PascalCase for components, camelCase for variables/functions, UPPER_SNAKE_CASE for constants.
+
+# Type Safety & Validation
+- Always use TypeScript with strict mode enabled.
+- Define interfaces/types for all data structures; avoid `any`.
+- Use generics for reusable components and functions.
+- Validate all user input on both frontend (Yup/Zod) and backend (Laravel validation rules).
+- Sanitize all user input before storing or displaying.
+- Use proper API typing for all requests and responses.
+
+# Error Handling & Logging
+- Implement comprehensive error handling with try-catch for async operations.
+- Create custom error types for different scenarios.
+- Log errors with context; insert meaningful log statements at the start and finish of every critical function, including parameters and results.
+- Provide user-friendly error messages; never expose technical details to users.
+- Use React Error Boundaries for frontend error containment.
+- Always show loading indicators for async operations and handle partial failures gracefully.
+
+# Performance Optimization
+- Optimize React components with React.memo, useCallback, and useMemo.
+- Implement code splitting and lazy loading for large components/pages.
+- Use React Query (or similar) for API caching and background updates.
+- Implement pagination for large datasets.
+- Use optimistic UI updates where possible.
+- Debounce user input to prevent excessive API calls.
+- Add proper indexes to database tables; use transactions for consistency.
+
+# Security
+- Implement authentication and authorization (JWT, session, or similar).
+- Store tokens securely (httpOnly cookies preferred).
+- Use role-based access control on both frontend and backend.
+- Validate and sanitize all input to prevent XSS, CSRF, and SQL injection.
+- Use environment variables for secrets; never hardcode sensitive data.
+- Keep dependencies updated and apply security patches regularly.
+
+# Testing & Validation
+- Adopt a test-first approach: write automated tests (PHPUnit, Jest/RTL) alongside or before new features whenever feasible.
+- Test error scenarios, edge cases, and loading states.
+- Use Arrange-Act-Assert structure in tests.
+- Mock external dependencies in tests.
+- Ensure >90% test coverage for new features.
+- After every major change, manually test all critical flows (admin and client) to catch regressions.
+
+# Documentation
+- Write clear, concise code comments (JSDoc/TSDoc for TS, PHPDoc for PHP).
+- Document all API endpoints with request/response examples.
+- Maintain a comprehensive README with setup, usage, and architecture notes.
+- Document key design decisions and trade-offs (ADR format recommended).
+- Keep a running list of known issues and TODOs in the repo.
+
+# Development Workflow
+- Pin all dependency versions in `package.json` and `composer.json` to ensure reproducible builds.
+- Use version control with meaningful, conventional commit messages.
+- Work on features in separate branches; use pull requests for review.
+- Run automated tests and code quality checks before merging.
+- Use ESLint/Prettier (frontend) and Pint (Laravel) for code style enforcement.
+- Use CI/CD for automated testing and deployment.
+- After every code review, update documentation and checklists as needed.
+
+# Code Quality
+- Follow SOLID principles and appropriate design patterns.
+- Write clean, readable, and maintainable code.
+- Handle all edge cases (null/undefined, empty states, error/loading states).
+- Use consistent formatting and meaningful variable names.
+- Prioritize accessibility and responsive design in UI components.
+
+# Component-Driven Development & Reusability
+- Wrap and Theme UI Library Components: Instead of using base UI library components (e.g., MUI's `<Button>`) directly in your application, wrap them into your own custom, reusable components (e.g., `<AppButton>`). This creates a consistent, application-specific design system. Centralize all styling variations (colors, sizes, variants) in a global theme file so that visual changes can be made from a single, easily customizable location.
+- Document Every Custom Component: Maintain a central component documentation file (e.g., `COMPONENTS.md`). For each custom component, document its purpose, available props (with types and defaults), and provide clear code examples for its usage.
+- Review Before You Build: Adopt a "review-first" policy. Before creating any new component, thoroughly review the existing component library and its documentation to find a component that can be reused or extended.
+- Reuse by Default: When implementing any UI, your first step must be to consult the component documentation. Only create new components when no suitable reusable alternative exists. Prioritize composing small, single-purpose components to build complex interfaces.
+
+# AI Interaction & Tooling
+- Never run a command before running `dir` (or `ls`) to verify the current directory.
+- Never start a development server without first checking if it is already running on the required port.
+- Never use version control systems (e.g., Git) to commit changes unless explicitly told to do so.
+- Prioritize real API data. The use of hardcoded or static mock data files is forbidden. All test data must be generated and managed via database seeders for consistency and reproducibility.
+
+# AI Efficiency & Token Optimization
+- Write Concise & Modular Code: Aim for minimal, readable code. Break down complex problems into small, single-responsibility functions or components (< 200 lines). This reduces the cognitive load and token count for each change.
+- Aggressively Reuse Code (DRY): Before writing any new code, always search the existing codebase for functions, services, or components that can be reused. Never duplicate logic.
+- Prefer Incremental Edits: Make small, targeted changes using diffs rather than rewriting entire files. This minimizes the number of tokens in each request and response.
+- Be Precise with Scoping: When requesting changes, focus on one specific task at a time. Narrowly scoped requests lead to more efficient and accurate AI responses.
+- Use Configuration over Code: For things like routes, permissions, or UI variants, use configuration files (e.g., JSON, arrays of objects). Modifying a small config entry is far more token-efficient than editing imperative code.
+- Use Efficient Tooling: Leverage file system and search tools to gather context. Reading specific line ranges or searching for specific patterns is more token-efficient than reading entire files.
+- Stub Complex Logic: When scaffolding a new feature, implement the core structure first and use stubs or `// TODO:` comments for complex internal logic. Implement the details in subsequent, focused requests. This breaks large token-heavy tasks into smaller, manageable ones.
+
+# Continuous Learning & Research
+- Regularly search the web and GitHub to see how others have solved similar problems; learn from open source and community best practices.
+- Use context/documentation tools (such as Context7 or similar) to fetch the latest official documentation for any library or framework you are working with.
+- Before implementing a new feature or fixing a bug, check for up-to-date patterns, solutions, and recommendations from trusted sources.
+- Document any external resources or patterns you adopt, and reference them in code comments or ADRs.
+
+# Standout Practices
+- Proactively document and communicate architectural decisions and changes.
+- Regularly review and refactor code for maintainability and scalability.
+- Use checklists for every feature and release to ensure completeness.
+- Always test both happy path and edge cases for all user types.
+- Keep a changelog and update it with every release.
+- Mentor and review code for peers, sharing best practices and lessons learned.
+- Continuously research and apply new knowledge from the web, GitHub, and official documentation to improve code quality and stay current.
+- Write token-efficient code: prioritize modularity, reusability, and conciseness to maximize efficiency and maintainability.
+
+# Checklist for Every Feature
+- [ ] Type safety: all code is properly typed
+- [ ] Validation: all inputs validated and sanitized
+- [ ] Error handling: comprehensive and user-friendly
+- [ ] Loading states: proper indicators for async ops
+- [ ] Testing: unit/integration/E2E tests
+- [ ] Documentation: code comments and API docs
+- [ ] Accessibility: keyboard and screen reader support
+- [ ] Performance: optimized rendering and API calls
+- [ ] Security: input validation and authentication
+- [ ] Responsive design: works on all screen sizes
+- [ ] Error boundaries: graceful error handling in UI
+- [ ] Both admin and client flows implemented and tested
+- [ ] DB schema and code are in sync
+- [ ] All critical business logic validated end-to-end
+- [ ] Latest best practices and documentation reviewed for all major libraries used
+- [ ] Code is modular, reusable, and token-efficient
+- [ ] Existing components reviewed for reuse, and new components documented
+
+---
+
+// These rules are always in effect for any project using MUI, React, TypeScript, Laravel, and SQLite/PHP. Apply them to all code, reviews, and documentation.
+description:
+globs:
+alwaysApply: false
+---
