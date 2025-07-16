@@ -46,7 +46,8 @@ import {
 import { useNavigationStore } from '../../store/navigationStore';
 import { useGlobalLoading } from '../../hooks/useGlobalLoading';
 import { LoadingScreen } from '../ui';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { settingsService } from '../../services/settingsService';
 import DraggableNavItem from './DraggableNavItem';
 
 const drawerWidth = 64;
@@ -76,6 +77,12 @@ function AdminLayout() {
   
   // Query client for refresh functionality
   const queryClient = useQueryClient();
+  
+  // Fetch settings to get website URL for "Ma page web" button
+  const { data: settings } = useQuery({
+    queryKey: ['systemSettings'],
+    queryFn: settingsService.getSettings,
+  });
   
   // Mobile responsive
   const theme = useTheme();
@@ -115,6 +122,12 @@ function AdminLayout() {
     localStorage.removeItem('token');
     navigate('/login');
     handleUserMenuClose();
+  };
+
+  const handleWebsiteOpen = () => {
+    if (settings?.website_url) {
+      window.open(settings.website_url, '_blank');
+    }
   };
 
   /**
@@ -352,7 +365,16 @@ function AdminLayout() {
                 <Button color="inherit" size="small">
                   Mes calendriers
                 </Button>
-                <Button color="inherit" size="small">
+                <Button 
+                  color="inherit" 
+                  size="small"
+                  onClick={handleWebsiteOpen}
+                  disabled={!settings?.website_url}
+                  sx={{
+                    opacity: settings?.website_url ? 1 : 0.5,
+                    cursor: settings?.website_url ? 'pointer' : 'default',
+                  }}
+                >
                   Ma page web
                 </Button>
                 <Button color="inherit" size="small">

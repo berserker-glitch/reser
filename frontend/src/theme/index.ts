@@ -1,4 +1,5 @@
-import { createTheme, Theme, PaletteMode } from '@mui/material/styles';
+import { createTheme } from '@mui/material/styles';
+import type { Theme, PaletteMode } from '@mui/material/styles';
 
 /**
  * Creates a theme based on the specified mode (light or dark)

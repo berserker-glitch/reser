@@ -33,12 +33,10 @@ import {
   RestartAlt,
   AccessTime,
   EventAvailable,
-  Language,
   DarkMode,
   LightMode,
   Public,
   CalendarToday,
-  Settings,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -115,7 +113,7 @@ const Settings: React.FC = () => {
   // Settings-related state
   const [websiteUrl, setWebsiteUrl] = useState<string>('');
   const [holidayMode, setHolidayMode] = useState<'default' | 'manual'>('default');
-  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
+  // const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   // Initialize default working hours
   useEffect(() => {
@@ -341,7 +339,7 @@ const Settings: React.FC = () => {
   // Settings mutations
   const updateWebsiteUrlMutation = useMutation({
     mutationFn: settingsService.updateWebsiteUrl,
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
       setSuccessMessage('URL du site web mise à jour');
       setShowSuccessSnackbar(true);
@@ -365,7 +363,7 @@ const Settings: React.FC = () => {
 
   const updateHolidayModeMutation = useMutation({
     mutationFn: settingsService.updateHolidayMode,
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
       setSuccessMessage('Mode de gestion des jours fériés mis à jour');
       setShowSuccessSnackbar(true);
