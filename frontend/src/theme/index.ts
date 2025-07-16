@@ -1,8 +1,16 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, Theme, PaletteMode } from '@mui/material/styles';
 
-export const theme = createTheme({
-  palette: {
-    mode: 'light',
+/**
+ * Creates a theme based on the specified mode (light or dark)
+ * @param mode - The palette mode ('light' or 'dark')
+ * @returns A Material-UI theme object
+ */
+export const createAppTheme = (mode: PaletteMode): Theme => {
+  const isLight = mode === 'light';
+  
+  return createTheme({
+    palette: {
+      mode,
     primary: {
       main: '#1860ff',
       light: '#5084ff',
@@ -40,12 +48,12 @@ export const theme = createTheme({
       contrastText: '#fff',
     },
     background: {
-      default: '#e5e5e5',
-      paper: '#ffffff',
+      default: isLight ? '#e5e5e5' : '#121212',
+      paper: isLight ? '#ffffff' : '#1e1e1e',
     },
     text: {
-      primary: '#4a4a4a',
-      secondary: 'rgba(74, 74, 74, 0.6)',
+      primary: isLight ? '#4a4a4a' : 'rgba(255, 255, 255, 0.87)',
+      secondary: isLight ? 'rgba(74, 74, 74, 0.6)' : 'rgba(255, 255, 255, 0.6)',
     },
   },
   typography: {
@@ -134,40 +142,44 @@ export const theme = createTheme({
         },
       },
     },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#ffffff',
-          color: 'rgba(0, 0, 0, 0.87)',
+          MuiAppBar: {
+        styleOverrides: {
+          root: {
+            backgroundColor: isLight ? '#ffffff' : '#1e1e1e',
+            color: isLight ? 'rgba(0, 0, 0, 0.87)' : 'rgba(255, 255, 255, 0.87)',
           boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)',
         },
       },
     },
-    MuiDrawer: {
-      styleOverrides: {
-        paper: {
-          backgroundColor: '#ffffff',
-          border: 'none',
+          MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: isLight ? '#ffffff' : '#1e1e1e',
+            border: 'none',
+          },
         },
       },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          border: 'none',
-          outline: 'none',
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            border: 'none',
+            outline: 'none',
+            backgroundColor: isLight ? '#ffffff' : '#1e1e1e',
+          },
         },
       },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          border: 'none',
-          boxShadow: '0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12)',
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            border: 'none',
+            backgroundColor: isLight ? '#ffffff' : '#1e1e1e',
+            boxShadow: isLight 
+              ? '0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12)'
+              : '0px 2px 1px -1px rgba(255,255,255,0.1), 0px 1px 1px 0px rgba(255,255,255,0.05), 0px 1px 3px 0px rgba(255,255,255,0.08)',
+          },
         },
       },
-    },
     MuiButton: {
       styleOverrides: {
         root: {
@@ -188,6 +200,10 @@ export const theme = createTheme({
   shape: {
     borderRadius: 8,
   },
-});
+  });
+};
+
+// Default light theme for backward compatibility
+export const theme = createAppTheme('light');
 
 export default theme; 

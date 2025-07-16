@@ -33,9 +33,17 @@ import {
   RestartAlt,
   AccessTime,
   EventAvailable,
+  Language,
+  DarkMode,
+  LightMode,
+  Public,
+  CalendarToday,
+  Settings,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { useTheme as useCustomTheme } from '../../contexts/ThemeContext';
+import { settingsService } from '../../services/settingsService';
 
 // Types
 interface WorkingHoursState {
@@ -83,6 +91,7 @@ const WEEKDAYS = [
  */
 const Settings: React.FC = () => {
   const queryClient = useQueryClient();
+  const { mode: themeMode, toggleTheme, setTheme } = useCustomTheme();
 
   // State management
   const [workingHours, setWorkingHours] = useState<WorkingHoursState>({});
@@ -102,6 +111,11 @@ const Settings: React.FC = () => {
   const [previewDialog, setPreviewDialog] = useState(false);
   const [resetConfirmDialog, setResetConfirmDialog] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
+
+  // Settings-related state
+  const [websiteUrl, setWebsiteUrl] = useState<string>('');
+  const [holidayMode, setHolidayMode] = useState<'default' | 'manual'>('default');
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   // Initialize default working hours
   useEffect(() => {
@@ -130,6 +144,13 @@ const Settings: React.FC = () => {
     },
   });
 
+  // Fetch system settings
+  const { data: systemSettings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['systemSettings'],
+    queryFn: settingsService.getSettings,
+    refetchOnWindowFocus: false,
+  });
+
   // Set profile form when user data loads
   useEffect(() => {
     if (userProfile) {
@@ -140,6 +161,18 @@ const Settings: React.FC = () => {
       });
     }
   }, [userProfile]);
+
+  // Set settings form when settings data loads
+  useEffect(() => {
+    if (systemSettings) {
+      setWebsiteUrl(systemSettings.website_url || '');
+      setHolidayMode(systemSettings.holiday_mode);
+      // Update theme context if different from current
+      if (systemSettings.theme !== themeMode) {
+        setTheme(systemSettings.theme);
+      }
+    }
+  }, [systemSettings, themeMode, setTheme]);
 
   // Fetch working hours
   const { data: workingHoursData, isLoading: loadingWorkingHours } = useQuery({
@@ -305,6 +338,43 @@ const Settings: React.FC = () => {
     }
   });
 
+  // Settings mutations
+  const updateWebsiteUrlMutation = useMutation({
+    mutationFn: settingsService.updateWebsiteUrl,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
+      setSuccessMessage('URL du site web mise à jour');
+      setShowSuccessSnackbar(true);
+    },
+    onError: (error: Error) => {
+      setErrorMessage(error.message);
+    },
+  });
+
+  const updateThemeMutation = useMutation({
+    mutationFn: settingsService.updateTheme,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
+      setSuccessMessage(`Thème changé vers ${data.theme === 'dark' ? 'sombre' : 'clair'}`);
+      setShowSuccessSnackbar(true);
+    },
+    onError: (error: Error) => {
+      setErrorMessage(error.message);
+    },
+  });
+
+  const updateHolidayModeMutation = useMutation({
+    mutationFn: settingsService.updateHolidayMode,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
+      setSuccessMessage('Mode de gestion des jours fériés mis à jour');
+      setShowSuccessSnackbar(true);
+    },
+    onError: (error: Error) => {
+      setErrorMessage(error.message);
+    },
+  });
+
   // Handlers
   const handleWorkingHourChange = (weekday: number, field: string, value: string | boolean) => {
     setWorkingHours(prev => ({
@@ -370,6 +440,26 @@ const Settings: React.FC = () => {
     return Object.values(workingHours).reduce((total, dayData) => {
       return total + calculateWorkingHours(dayData);
     }, 0);
+  };
+
+  // Settings handlers
+  const handleWebsiteUrlSave = () => {
+    if (websiteUrl.trim() === '') {
+      updateWebsiteUrlMutation.mutate(null);
+    } else {
+      updateWebsiteUrlMutation.mutate(websiteUrl.trim());
+    }
+  };
+
+  const handleThemeToggle = () => {
+    const newTheme = themeMode === 'light' ? 'dark' : 'light';
+    toggleTheme(); // Update local theme immediately for better UX
+    updateThemeMutation.mutate(newTheme);
+  };
+
+  const handleHolidayModeChange = (newMode: 'default' | 'manual') => {
+    setHolidayMode(newMode);
+    updateHolidayModeMutation.mutate(newMode);
   };
 
   return (
@@ -750,6 +840,129 @@ const Settings: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Website URL Setting */}
+      <Card elevation={1} sx={{ mt: 3 }}>
+        <CardHeader
+          avatar={<Public color="primary" />}
+          title="Site Web"
+          subheader="URL de votre site web pour le lien 'Ma page web'"
+        />
+        <CardContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="URL du site web"
+              placeholder="https://votre-salon.com"
+              fullWidth
+              value={websiteUrl}
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              disabled={settingsLoading}
+              helperText="Cette URL s'affichera dans le menu 'Ma page web' de l'en-tête"
+            />
+            <Button
+              variant="contained"
+              onClick={handleWebsiteUrlSave}
+              disabled={updateWebsiteUrlMutation.isPending || settingsLoading}
+              startIcon={<Save />}
+            >
+              {updateWebsiteUrlMutation.isPending ? 'Enregistrement...' : 'Enregistrer l\'URL'}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Theme Toggle */}
+      <Card elevation={1} sx={{ mt: 3 }}>
+        <CardHeader
+          avatar={themeMode === 'dark' ? <DarkMode color="primary" /> : <LightMode color="primary" />}
+          title="Thème de l'interface"
+          subheader="Basculez entre le mode clair et sombre"
+        />
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LightMode sx={{ color: themeMode === 'light' ? 'primary.main' : 'text.secondary' }} />
+              <Typography variant="body2" sx={{ fontWeight: themeMode === 'light' ? 600 : 400 }}>
+                Clair
+              </Typography>
+            </Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={themeMode === 'dark'}
+                  onChange={handleThemeToggle}
+                  disabled={updateThemeMutation.isPending || settingsLoading}
+                />
+              }
+              label=""
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: themeMode === 'dark' ? 600 : 400 }}>
+                Sombre
+              </Typography>
+              <DarkMode sx={{ color: themeMode === 'dark' ? 'primary.main' : 'text.secondary' }} />
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Holiday Management Mode */}
+      <Card elevation={1} sx={{ mt: 3 }}>
+        <CardHeader
+          avatar={<CalendarToday color="primary" />}
+          title="Gestion des jours fériés"
+          subheader="Choisissez comment gérer les jours fériés"
+        />
+        <CardContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={holidayMode === 'default'}
+                  onChange={(e) => handleHolidayModeChange(e.target.checked ? 'default' : 'manual')}
+                  disabled={updateHolidayModeMutation.isPending || settingsLoading}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Jours fériés automatiques
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Utilise l'API officielle pour les jours fériés marocains
+                  </Typography>
+                </Box>
+              }
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={holidayMode === 'manual'}
+                  onChange={(e) => handleHolidayModeChange(e.target.checked ? 'manual' : 'default')}
+                  disabled={updateHolidayModeMutation.isPending || settingsLoading}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Gestion manuelle
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Saisissez manuellement les dates et noms des jours fériés
+                  </Typography>
+                </Box>
+              }
+            />
+            {holidayMode === 'manual' && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                <Typography variant="caption">
+                  En mode manuel, vous pourrez ajouter et modifier les jours fériés depuis la section horaires de travail.
+                </Typography>
+              </Alert>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Success Snackbar */}
       <Snackbar

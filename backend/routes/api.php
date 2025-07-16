@@ -8,6 +8,7 @@ use App\Http\Controllers\API\ReservationController;
 use App\Http\Controllers\API\EmployeeController;
 use App\Http\Controllers\API\ServiceController;
 use App\Http\Controllers\API\WorkingHourController;
+use App\Http\Controllers\API\SettingController;
 use App\Models\Service;
 use App\Models\WorkingHour;
 
@@ -174,6 +175,9 @@ Route::group([
 
     // Employee list for clients (read-only)
     Route::get('/employees', [EmployeeController::class, 'clientIndex']);
+    
+    // Settings routes (read access for all authenticated users)
+    Route::get('/settings', [SettingController::class, 'index']);
 });
 
 // Public working hours endpoint - show all employees working every day
@@ -229,9 +233,10 @@ Route::group([
     Route::delete('employees/{employee}/profile-picture', [EmployeeController::class, 'removeProfilePicture']);
     
     // Service management (full CRUD for owners)
-    Route::apiResource('services', ServiceController::class);
+    // Specific routes must come before apiResource to avoid conflicts
     Route::get('services/with-employees', [ServiceController::class, 'withEmployees']);
     Route::get('services/statistics', [ServiceController::class, 'statistics']);
+    Route::apiResource('services', ServiceController::class);
     
     // Working hours management (full CRUD for owners)
     Route::apiResource('working-hours', WorkingHourController::class);
@@ -293,4 +298,8 @@ Route::group([
     
     // Cache management routes (Owner only)
     Route::delete('/cache/availability', [AvailabilityController::class, 'clearCache']);
+    
+    // Settings management (full CRUD for owners)
+    Route::apiResource('settings', SettingController::class)->except(['index']);
+    Route::post('settings/cache/clear', [SettingController::class, 'clearCache']);
 });

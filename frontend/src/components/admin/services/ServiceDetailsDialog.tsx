@@ -204,7 +204,7 @@ export const ServiceDetailsDialog: React.FC<ServiceDetailsDialogProps> = ({ open
 
       <DialogContent>
         {/* Service Information Card */}
-        <Card elevation={2} sx={{ mb: 3 }}>
+        <Card elevation={1} sx={{ mb: 2, border: '1px solid #f0f0f0' }}>
           <CardContent>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
               Informations du Service
@@ -222,24 +222,24 @@ export const ServiceDetailsDialog: React.FC<ServiceDetailsDialogProps> = ({ open
 
               <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AttachMoney sx={{ color: 'success.main' }} />
+                  <AttachMoney sx={{ color: 'secondary.main' }} />
                   <Box>
                     <Typography variant="body2" color="text.secondary">
                       Prix
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {service.price_dhs} DHS
                     </Typography>
                   </Box>
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AccessTime sx={{ color: 'info.main' }} />
+                  <AccessTime sx={{ color: 'secondary.main' }} />
                   <Box>
                     <Typography variant="body2" color="text.secondary">
                       Durée
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {service.duration_min} min
                     </Typography>
                   </Box>
@@ -319,8 +319,8 @@ export const ServiceDetailsDialog: React.FC<ServiceDetailsDialogProps> = ({ open
                         Réservations Passées
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CalendarToday sx={{ color: 'info.main' }} />
-                        <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                        <CalendarToday sx={{ color: 'secondary.main' }} />
+                                                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                           {analytics.pastReservations}
                         </Typography>
                       </Box>
@@ -333,8 +333,8 @@ export const ServiceDetailsDialog: React.FC<ServiceDetailsDialogProps> = ({ open
                         Réservations Futures
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <People sx={{ color: 'warning.main' }} />
-                        <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                        <People sx={{ color: 'secondary.main' }} />
+                                                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                           {analytics.futureReservations}
                         </Typography>
                       </Box>

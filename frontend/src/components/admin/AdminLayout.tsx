@@ -308,6 +308,8 @@ function AdminLayout() {
               position: 'sticky',
               top: 0,
               zIndex: 1100,
+              bgcolor: 'white',
+              borderBottom: '1px solid #e0e0e0',
             }}
           >
             {/* Left side - Mobile Menu Button, Breadcrumb and Search */}

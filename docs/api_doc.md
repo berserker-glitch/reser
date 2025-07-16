@@ -11,9 +11,10 @@ This document provides a detailed overview of the API endpoints for the Salon Re
 3.  [Employees](#employees)
 4.  [Working Hours](#working-hours)
 5.  [Holidays](#holidays)
-6.  [Availability](#availability)
-7.  [Reservations](#reservations)
-8.  [Admin Dashboard](#admin-dashboard)
+6.  [Settings](#settings)
+7.  [Availability](#availability)
+8.  [Reservations](#reservations)
+9.  [Admin Dashboard](#admin-dashboard)
 
 ---
 
@@ -224,7 +225,110 @@ Manages when employees work. These are now global settings.
 
 ---
 
-## 6. Availability
+## 6. Settings
+
+Manages system-wide configuration settings including website URL, holiday mode, theme, and salon information.
+
+-   **Controller File**: `backend/app/Http/Controllers/API/SettingController.php`
+
+### GET `/api/settings`
+
+-   **Description**: (Authenticated) Retrieves the current system settings. Available to all authenticated users.
+-   **Middleware**: `auth:api`
+-   **Success Response** (`200 OK`):
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": 1,
+        "website_url": "https://salon-example.com",
+        "holiday_mode": "default",
+        "theme": "light",
+        "salon_name": "Salon Belle",
+        "salon_address": "123 Rue Mohammed V, Casablanca",
+        "salon_phone": "+212 5XX-XXXXXX",
+        "salon_email": "contact@salon-belle.ma",
+        "timezone": "Africa/Casablanca",
+        "created_at": "2025-07-16T13:42:27.000000Z",
+        "updated_at": "2025-07-16T13:42:27.000000Z"
+      }
+    }
+    ```
+
+### POST `/api/admin/settings`
+
+-   **Description**: (Owner only) Creates initial system settings. Only works if no settings exist.
+-   **Middleware**: `auth:api`, `role:OWNER`
+-   **Request Body**:
+    -   `website_url` (string, optional, URL): Website URL for "Ma page web" header link
+    -   `holiday_mode` (string, required, `default` or `manual`): Holiday management mode
+    -   `theme` (string, required, `light` or `dark`): UI theme setting
+    -   `salon_name` (string, optional): Salon business name
+    -   `salon_address` (string, optional): Salon physical address
+    -   `salon_phone` (string, optional): Salon contact phone
+    -   `salon_email` (string, optional, email): Salon contact email
+    -   `timezone` (string, required): Operating timezone
+-   **Success Response** (`201 Created`): The newly created settings object.
+-   **Error Response** (`409 Conflict`): If settings already exist.
+
+### GET `/api/admin/settings/{id}`
+
+-   **Description**: (Owner only) Retrieves specific settings record (same as GET `/api/settings` since settings are singleton).
+-   **Middleware**: `auth:api`, `role:OWNER`
+-   **Success Response** (`200 OK`): The settings object.
+
+### PUT `/api/admin/settings/{id}`
+
+-   **Description**: (Owner only) Updates system settings. All fields are optional.
+-   **Middleware**: `auth:api`, `role:OWNER`
+-   **Request Body**: Same fields as POST request, but all optional.
+-   **Success Response** (`200 OK`):
+    ```json
+    {
+      "success": true,
+      "data": { ... },
+      "message": "Settings updated successfully"
+    }
+    ```
+-   **Error Response** (`422 Unprocessable Entity`): For validation errors.
+
+### DELETE `/api/admin/settings/{id}`
+
+-   **Description**: (Owner only) Resets settings to default values rather than deleting the record.
+-   **Middleware**: `auth:api`, `role:OWNER`
+-   **Success Response** (`200 OK`):
+    ```json
+    {
+      "success": true,
+      "data": { ... },
+      "message": "Settings reset to defaults successfully"
+    }
+    ```
+
+### POST `/api/admin/settings/cache/clear`
+
+-   **Description**: (Owner only) Clears the settings cache to force fresh data retrieval.
+-   **Middleware**: `auth:api`, `role:OWNER`
+-   **Success Response** (`200 OK`):
+    ```json
+    {
+      "success": true,
+      "message": "Settings cache cleared successfully"
+    }
+    ```
+
+**Settings Fields Description:**
+- `website_url`: URL for the salon website, used in header "Ma page web" link
+- `holiday_mode`: 
+  - `default`: Use Nager.Date API for Moroccan public holidays
+  - `manual`: Allow manual entry of holiday dates/names
+- `theme`: UI theme (`light` or `dark`)
+- `salon_name`, `salon_address`, `salon_phone`, `salon_email`: Business information
+- `timezone`: Operating timezone for the salon (default: `Africa/Casablanca`)
+
+---
+
+## 7. Availability
 
 -   **Controller File**: `backend/app/Http/Controllers/API/AvailabilityController.php`
 
@@ -240,7 +344,7 @@ Manages when employees work. These are now global settings.
 
 ---
 
-## 7. Reservations
+## 8. Reservations
 
 -   **Controller File**: `backend/app/Http/Controllers/API/ReservationController.php`
 
@@ -273,7 +377,7 @@ Manages when employees work. These are now global settings.
 
 ---
 
-## 8. Admin Dashboard
+## 9. Admin Dashboard
 
 -   **Modification File**: `backend/routes/api.php`
 

@@ -40,7 +40,7 @@ const fetchServices = async (): Promise<Service[]> => {
   }
   
   try {
-    const response = await axios.get('/api/services', {
+    const response = await axios.get('/api/admin/services', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -60,7 +60,7 @@ const fetchServiceStatistics = async () => {
   }
   
   try {
-    const response = await axios.get('/api/services/statistics', {
+    const response = await axios.get('/api/admin/services/statistics', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -68,6 +68,27 @@ const fetchServiceStatistics = async () => {
     return response.data;
   } catch (error: any) {
     console.error('❌ Service statistics API error:', error.response?.status, error.response?.data);
+    throw error;
+  }
+};
+
+// Fetch real reservation data for analytics
+const fetchReservationAnalytics = async () => {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('access_token') || localStorage.getItem('token');
+  
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+  
+  try {
+    const response = await axios.get('/api/admin/reports/reservations', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ Reservation analytics API error:', error.response?.status, error.response?.data);
     throw error;
   }
 };
@@ -80,7 +101,7 @@ const createService = async (serviceData: Omit<Service, 'id' | 'created_at' | 'u
   }
   
   try {
-    const response = await axios.post('/api/services', serviceData, {
+    const response = await axios.post('/api/admin/services', serviceData, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -152,12 +173,23 @@ const ServicesManagement: React.FC = () => {
     refetchOnWindowFocus: false,
   });
 
+  const {
+    data: reservationAnalytics,
+    isLoading: reservationAnalyticsLoading,
+    error: reservationAnalyticsError,
+  } = useQuery({
+    queryKey: ['reservation-analytics'],
+    queryFn: fetchReservationAnalytics,
+    refetchOnWindowFocus: false,
+  });
+
   // Mutations
   const createServiceMutation = useMutation({
     mutationFn: createService,
     onSuccess: (newService) => {
       queryClient.invalidateQueries({ queryKey: ['services'] });
       queryClient.invalidateQueries({ queryKey: ['service-statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['reservation-analytics'] });
       setCreateDialogOpen(false);
       reset();
       setSuccessMessage(`Service "${newService.name}" créé avec succès !`);
@@ -195,91 +227,89 @@ const ServicesManagement: React.FC = () => {
   };
 
   // Loading state
-  if (servicesLoading || statisticsLoading) {
+  if (servicesLoading || statisticsLoading || reservationAnalyticsLoading) {
     return <LoadingScreen message="Chargement des services..." />;
   }
 
   // Error state
-  if (servicesError || statisticsError) {
+  if (servicesError || statisticsError || reservationAnalyticsError) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
+      <Box sx={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Alert severity="error">
           Erreur lors du chargement des services. Veuillez réessayer.
         </Alert>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          Gestion des Services
-        </Typography>
-        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-          Gérez votre catalogue de prestations
-        </Typography>
-      </Box>
+    <Box sx={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column' }}>
+      {/* Main content area */}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Container maxWidth="lg" sx={{ py: 2 }}>
+          {/* Analytics Section */}
+          <Box sx={{ mb: 3 }}>
+            <ServicesAnalytics 
+              statistics={statistics} 
+              reservationAnalytics={reservationAnalytics}
+            />
+          </Box>
 
-      {/* Analytics Section */}
-      <Box sx={{ mb: 4 }}>
-        <ServicesAnalytics statistics={statistics} />
-      </Box>
+          {/* Services Grid */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2, color: 'text.primary' }}>
+              Services Disponibles
+            </Typography>
 
-      {/* Services Grid */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Services Disponibles
-        </Typography>
-
-        {services && services.length > 0 ? (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: 3,
-              justifyContent: 'flex-start',
-              alignItems: 'stretch',
-            }}
-          >
-            {services.map((service) => (
+            {services && services.length > 0 ? (
               <Box
-                key={service.id}
                 sx={{
-                  flex: '1 1 300px',
-                  maxWidth: isMobile ? '100%' : '400px',
-                  minWidth: isMobile ? '100%' : '300px',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  gap: 1.5,
+                  justifyContent: 'flex-start',
+                  alignItems: 'stretch',
                 }}
               >
-                <ServiceCard
-                  service={service}
-                  onClick={() => handleServiceClick(service)}
-                />
+                {services.map((service) => (
+                  <Box
+                    key={service.id}
+                    sx={{
+                      flex: '1 1 280px',
+                      maxWidth: isMobile ? '100%' : '320px',
+                      minWidth: isMobile ? '100%' : '280px',
+                    }}
+                  >
+                    <ServiceCard
+                      service={service}
+                      onClick={() => handleServiceClick(service)}
+                    />
+                  </Box>
+                ))}
               </Box>
-            ))}
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Aucun service disponible
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Cliquez sur le bouton "+" pour créer votre premier service
+                </Typography>
+              </Box>
+            )}
           </Box>
-        ) : (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              Aucun service disponible
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Cliquez sur le bouton "+" pour créer votre premier service
-            </Typography>
-          </Box>
-        )}
+        </Container>
       </Box>
 
       {/* Floating Action Button */}
       <Fab
-        color="primary"
+        color="secondary"
         aria-label="add service"
         sx={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          bottom: 20,
+          right: 20,
           zIndex: 1000,
         }}
         onClick={() => setCreateDialogOpen(true)}
@@ -310,7 +340,7 @@ const ServicesManagement: React.FC = () => {
         
         <form onSubmit={handleSubmit(handleCreateService)}>
           <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
               <Controller
                 name="name"
                 control={control}
@@ -430,7 +460,7 @@ const ServicesManagement: React.FC = () => {
           {successMessage || errorMessage}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 };
 

@@ -4,8 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  Avatar,
-  Chip,
   CircularProgress,
   useTheme,
   useMediaQuery,
@@ -15,7 +13,6 @@ import {
   AttachMoney,
   AccessTime,
   TrendingUp,
-  Star,
 } from '@mui/icons-material';
 
 interface ServiceStatistics {
@@ -38,8 +35,19 @@ interface ServiceStatistics {
   };
 }
 
+interface ReservationAnalytics {
+  total_reservations: number;
+  total_revenue: number;
+  popular_services: Array<{
+    service_name: string;
+    reservation_count: number;
+    revenue: number;
+  }>;
+}
+
 interface ServicesAnalyticsProps {
   statistics: ServiceStatistics | null;
+  reservationAnalytics: ReservationAnalytics | null;
 }
 
 /**
@@ -48,17 +56,20 @@ interface ServicesAnalyticsProps {
  * Displays key analytics and metrics for the services:
  * - Total services count
  * - Average price and duration
- * - Most popular services
- * - Price and duration ranges
+ * - Most popular services from real data
+ * - Revenue and reservation analytics
  */
-export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics }) => {
+export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ 
+  statistics, 
+  reservationAnalytics 
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   if (!statistics) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
         <CircularProgress />
       </Box>
     );
@@ -69,36 +80,28 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
     {
       title: 'Total Services',
       value: statistics.total_services,
-      icon: <Business />,
-      color: 'primary.main',
-      bgColor: 'primary.light',
+      icon: <Business sx={{ color: 'secondary.main' }} />,
     },
     {
       title: 'Prix Moyen',
       value: `${statistics.average_price?.toFixed(0) || 0} DHS`,
-      icon: <AttachMoney />,
-      color: 'success.main',
-      bgColor: 'success.light',
+      icon: <AttachMoney sx={{ color: 'secondary.main' }} />,
     },
     {
       title: 'Durée Moyenne',
       value: `${statistics.average_duration?.toFixed(0) || 0} min`,
-      icon: <AccessTime />,
-      color: 'info.main',
-      bgColor: 'info.light',
+      icon: <AccessTime sx={{ color: 'secondary.main' }} />,
     },
     {
-      title: 'Gamme de Prix',
-      value: `${statistics.price_range?.min || 0} - ${statistics.price_range?.max || 0} DHS`,
-      icon: <TrendingUp />,
-      color: 'warning.main',
-      bgColor: 'warning.light',
+      title: 'Revenus Totaux',
+      value: `${reservationAnalytics?.total_revenue?.toFixed(0) || 0} DHS`,
+      icon: <TrendingUp sx={{ color: 'secondary.main' }} />,
     },
   ];
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
         Aperçu des Services
       </Typography>
 
@@ -107,8 +110,8 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
         sx={{
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          gap: 3,
-          mb: 4,
+          gap: 1.5,
+          mb: 2,
           flexWrap: isTablet ? 'wrap' : 'nowrap',
         }}
       >
@@ -117,37 +120,35 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
             key={index}
             sx={{
               flex: isMobile ? 'none' : '1',
-              minWidth: isMobile ? '100%' : isTablet ? '45%' : '220px',
+              minWidth: isMobile ? '100%' : isTablet ? '45%' : '200px',
             }}
           >
             <Card
-              elevation={2}
+              elevation={1}
               sx={{
                 height: '100%',
-                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                border: '1px solid #f0f0f0',
+                transition: 'box-shadow 0.2s ease-in-out',
                 '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
+                  boxShadow: 2,
                 },
               }}
             >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Avatar
-                    sx={{
-                      bgcolor: card.bgColor,
-                      color: card.color,
-                      width: 56,
-                      height: 56,
-                    }}
-                  >
+              <CardContent sx={{ p: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ 
+                    color: 'text.secondary',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
                     {card.icon}
-                  </Avatar>
+                  </Box>
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       {card.title}
                     </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: card.color }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
                       {card.value}
                     </Typography>
                   </Box>
@@ -158,63 +159,62 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
         ))}
       </Box>
 
-      {/* Most Popular Services */}
-      {statistics.most_popular && statistics.most_popular.length > 0 && (
-        <Card elevation={2} sx={{ mb: 2 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <Avatar sx={{ bgcolor: 'secondary.light', color: 'secondary.main' }}>
-                <Star />
-              </Avatar>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                Services les Plus Populaires
-              </Typography>
-            </Box>
+      {/* Popular Services from Real Data */}
+      {(reservationAnalytics?.popular_services && reservationAnalytics.popular_services.length > 0) && (
+        <Card elevation={1} sx={{ border: '1px solid #f0f0f0', mb: 2 }}>
+          <CardContent sx={{ p: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary' }}>
+              Services les Plus Réservés
+            </Typography>
 
             <Box
               sx={{
                 display: 'flex',
                 flexDirection: isMobile ? 'column' : 'row',
-                gap: 2,
+                gap: 1.5,
                 flexWrap: 'wrap',
               }}
             >
-              {statistics.most_popular.slice(0, 3).map((service, index) => (
+              {reservationAnalytics.popular_services.slice(0, 3).map((service, index) => (
                 <Box
-                  key={service.id}
+                  key={index}
                   sx={{
                     flex: isMobile ? 'none' : '1',
-                    minWidth: isMobile ? '100%' : '280px',
+                    minWidth: isMobile ? '100%' : '250px',
                   }}
                 >
                   <Card
                     variant="outlined"
                     sx={{
-                      p: 2,
-                      transition: 'transform 0.2s ease-in-out',
+                      p: 1.5,
+                      backgroundColor: '#fafafa',
+                      transition: 'background-color 0.2s ease-in-out',
                       '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: 2,
+                        backgroundColor: '#f5f5f5',
                       },
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                        {service.name}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '0.9rem', color: 'text.primary' }}>
+                        {service.service_name}
                       </Typography>
-                      <Chip
-                        label={`#${index + 1}`}
-                        size="small"
-                        color="primary"
-                        sx={{ fontWeight: 'bold' }}
-                      />
+                      <Typography variant="caption" sx={{ 
+                        backgroundColor: 'primary.main', 
+                        color: 'white', 
+                        px: 1, 
+                        py: 0.25, 
+                        borderRadius: 1,
+                        fontWeight: 500 
+                      }}>
+                        #{index + 1}
+                      </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">
-                        {service.price_dhs} DHS
+                        {service.reservation_count} réservations
                       </Typography>
-                      <Typography variant="body2" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                        {service.reservations_count} réservations
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                        {service.revenue} DHS
                       </Typography>
                     </Box>
                   </Card>
@@ -230,33 +230,33 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
         sx={{
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          gap: 3,
+          gap: 2,
         }}
       >
         <Box sx={{ flex: 1 }}>
-          <Card elevation={2} sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+          <Card elevation={1} sx={{ height: '100%', border: '1px solid #f0f0f0' }}>
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="body1" gutterBottom sx={{ fontWeight: 600, color: 'text.primary' }}>
                 Gamme de Durée
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1.5 }}>
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'text.primary' }}>
                     {statistics.duration_range?.min || 0}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Min (minutes)
+                  <Typography variant="caption" color="text.secondary">
+                    Min (min)
                   </Typography>
                 </Box>
-                <Box sx={{ flex: 1, height: 4, bgcolor: 'grey.300', borderRadius: 2, mx: 2 }}>
-                  <Box sx={{ height: '100%', bgcolor: 'info.main', borderRadius: 2, width: '100%' }} />
+                <Box sx={{ flex: 1, height: 3, bgcolor: '#e0e0e0', borderRadius: 1.5, mx: 1 }}>
+                  <Box sx={{ height: '100%', bgcolor: '#666', borderRadius: 1.5, width: '100%' }} />
                 </Box>
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'text.primary' }}>
                     {statistics.duration_range?.max || 0}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Max (minutes)
+                  <Typography variant="caption" color="text.secondary">
+                    Max (min)
                   </Typography>
                 </Box>
               </Box>
@@ -265,28 +265,28 @@ export const ServicesAnalytics: React.FC<ServicesAnalyticsProps> = ({ statistics
         </Box>
 
         <Box sx={{ flex: 1 }}>
-          <Card elevation={2} sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+          <Card elevation={1} sx={{ height: '100%', border: '1px solid #f0f0f0' }}>
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="body1" gutterBottom sx={{ fontWeight: 600, color: 'text.primary' }}>
                 Fourchette de Prix
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1.5 }}>
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'text.primary' }}>
                     {statistics.price_range?.min || 0}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary">
                     Min (DHS)
                   </Typography>
                 </Box>
-                <Box sx={{ flex: 1, height: 4, bgcolor: 'grey.300', borderRadius: 2, mx: 2 }}>
-                  <Box sx={{ height: '100%', bgcolor: 'success.main', borderRadius: 2, width: '100%' }} />
+                <Box sx={{ flex: 1, height: 3, bgcolor: '#e0e0e0', borderRadius: 1.5, mx: 1 }}>
+                  <Box sx={{ height: '100%', bgcolor: '#666', borderRadius: 1.5, width: '100%' }} />
                 </Box>
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'text.primary' }}>
                     {statistics.price_range?.max || 0}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary">
                     Max (DHS)
                   </Typography>
                 </Box>
