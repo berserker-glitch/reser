@@ -15,7 +15,6 @@ class WorkingHour extends Model
      * @var array<string>
      */
     protected $fillable = [
-        'employee_id',
         'weekday',
         'start_time',
         'end_time',
@@ -35,12 +34,4 @@ class WorkingHour extends Model
         'break_start' => 'string',
         'break_end' => 'string',
     ];
-
-    /**
-     * Get the employee that owns the working hour.
-     */
-    public function employee()
-    {
-        return $this->belongsTo(Employee::class);
-    }
 }

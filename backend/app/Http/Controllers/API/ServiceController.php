@@ -59,7 +59,7 @@ class ServiceController extends Controller
                 $query->orderBy($sortBy, $sortDirection);
             }
 
-            $services = $query->get();
+            $services = $query->with('employees')->get();
 
             Log::info('ServiceController@index - Services retrieved successfully', [
                 'count' => $services->count(),

@@ -67,11 +67,11 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
-     * Get the employee record associated with the user.
+     * Get the employee records associated with the user (owner).
      */
-    public function employee()
+    public function employees()
     {
-        return $this->hasOne(Employee::class);
+        return $this->hasMany(Employee::class);
     }
 
     /**

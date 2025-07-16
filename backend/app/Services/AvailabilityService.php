@@ -101,11 +101,14 @@ class AvailabilityService
             ->where('weekday', $weekday)
             ->first();
             
-        if (!$workingHour) {
-            Log::debug('No working hours found for employee', [
+        if (!$workingHour || !$workingHour->start_time || !$workingHour->end_time) {
+            Log::debug('No working hours or non-working day for employee', [
                 'employee_id' => $employee->id,
                 'weekday' => $weekday,
-                'date' => $date->format('Y-m-d')
+                'date' => $date->format('Y-m-d'),
+                'has_record' => !!$workingHour,
+                'start_time' => $workingHour->start_time ?? null,
+                'end_time' => $workingHour->end_time ?? null
             ]);
             return collect([]);
         }
@@ -182,28 +185,30 @@ class AvailabilityService
     public function isSlotAvailable(int $employeeId, Carbon $startDateTime, int $duration): bool
     {
         $endDateTime = $startDateTime->copy()->addMinutes($duration);
-        
+
+        Log::debug('Checking availability', [
+            'employee_id' => $employeeId,
+            'start_at' => $startDateTime->toIso8601String(),
+            'end_at' => $endDateTime->toIso8601String(),
+            'duration_min' => $duration,
+        ]);
+
         // Check for overlapping reservations
-        $conflictingReservations = Reservation::where('employee_id', $employeeId)
+        $query = Reservation::where('employee_id', $employeeId)
             ->where('status', '!=', 'CANCELLED')
             ->where(function ($query) use ($startDateTime, $endDateTime) {
-                $query->whereBetween('start_at', [$startDateTime, $endDateTime])
-                    ->orWhereBetween('end_at', [$startDateTime, $endDateTime])
-                    ->orWhere(function ($q) use ($startDateTime, $endDateTime) {
-                        $q->where('start_at', '<=', $startDateTime)
-                          ->where('end_at', '>=', $endDateTime);
-                    });
-            })
-            ->exists();
-            
-        if ($conflictingReservations) {
-            Log::debug('Slot conflict detected', [
-                'employee_id' => $employeeId,
-                'start_at' => $startDateTime->toISOString(),
-                'end_at' => $endDateTime->toISOString()
-            ]);
-        }
-            
+                $query->where('start_at', '<', $endDateTime)
+                      ->where('end_at', '>', $startDateTime);
+            });
+
+        $conflictingReservations = $query->exists();
+
+        Log::debug('Conflict check result', [
+            'sql' => $query->toSql(),
+            'bindings' => $query->getBindings(),
+            'conflict_found' => $conflictingReservations,
+        ]);
+
         return !$conflictingReservations;
     }
 
@@ -228,7 +233,7 @@ class AvailabilityService
                     ->where('weekday', $weekday)
                     ->first();
                     
-                if ($workingHour) {
+                if ($workingHour && $workingHour->start_time && $workingHour->end_time) {
                     $startTime = $startDateTime->format('H:i:s');
                     $endTime = $startDateTime->copy()->addMinutes($duration)->format('H:i:s');
                     

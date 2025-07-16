@@ -16,7 +16,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'request.logging' => \App\Http\Middleware\RequestLoggingMiddleware::class,
-            'auth' => \App\Http\Middleware\Authenticate::class,
         ]);
         
         // Apply request logging middleware to API routes

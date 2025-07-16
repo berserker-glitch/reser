@@ -158,6 +158,227 @@ class AuthController extends Controller
     }
 
     /**
+     * Change user password.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function changePassword(Request $request)
+    {
+        Log::info('Password change attempt', [
+            'user_id' => auth()->id(),
+            'email' => auth()->user()->email
+        ]);
+
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('Password change validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $validator->errors()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = auth()->user();
+
+            // Verify current password
+            if (!Hash::check($request->current_password, $user->password)) {
+                Log::warning('Password change failed - incorrect current password', [
+                    'user_id' => $user->id,
+                    'email' => $user->email
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Current password is incorrect'
+                ], 422);
+            }
+
+            // Update password
+            $user->password = Hash::make($request->new_password);
+            $user->save();
+
+            Log::info('Password changed successfully', [
+                'user_id' => $user->id,
+                'email' => $user->email
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password changed successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Password change failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to change password. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify user password.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verifyPassword(Request $request)
+    {
+        Log::info('Password verification attempt', [
+            'user_id' => auth()->id(),
+            'email' => auth()->user()->email
+        ]);
+
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('Password verification validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $validator->errors()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = auth()->user();
+
+            // Verify password
+            if (!Hash::check($request->password, $user->password)) {
+                Log::warning('Password verification failed - incorrect password', [
+                    'user_id' => $user->id,
+                    'email' => $user->email
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Le mot de passe est incorrect'
+                ], 422);
+            }
+
+            Log::info('Password verified successfully', [
+                'user_id' => $user->id,
+                'email' => $user->email
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password verified successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Password verification failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to verify password. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update user profile information.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateProfile(Request $request)
+    {
+        Log::info('Profile update attempt', [
+            'user_id' => auth()->id(),
+            'email' => auth()->user()->email
+        ]);
+
+        $validator = Validator::make($request->all(), [
+            'full_name' => 'sometimes|required|string|max:120',
+            'phone' => 'nullable|string|max:40',
+            'email' => 'sometimes|required|string|email|max:120|unique:users,email,' . auth()->id(),
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('Profile update validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $validator->errors()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = auth()->user();
+            
+            // Update only provided fields
+            if ($request->has('full_name')) {
+                $user->full_name = $request->full_name;
+            }
+            
+            if ($request->has('phone')) {
+                $user->phone = $request->phone;
+            }
+            
+            if ($request->has('email')) {
+                $user->email = $request->email;
+            }
+
+            $user->save();
+
+            Log::info('Profile updated successfully', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'updated_fields' => array_keys($request->only(['full_name', 'phone', 'email']))
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated successfully',
+                'user' => $user
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Profile update failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update profile. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
      * Get the authenticated User.
      *
      * @return \Illuminate\Http\JsonResponse

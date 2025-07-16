@@ -112,19 +112,42 @@ class WorkingHourController extends Controller
         $validator = Validator::make($request->all(), [
             'employee_id' => 'required|exists:employees,id',
             'weekday' => 'required|integer|min:0|max:6', // 0=Sunday, 6=Saturday
-            'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
-            'break_start' => 'nullable|date_format:H:i|after_or_equal:start_time|before:end_time',
-            'break_end' => 'nullable|date_format:H:i|after:break_start|before_or_equal:end_time'
+            'start_time' => 'nullable|date_format:H:i',
+            'end_time' => 'nullable|date_format:H:i',
+            'break_start' => 'nullable|date_format:H:i',
+            'break_end' => 'nullable|date_format:H:i'
         ]);
 
-        // Custom validation for break consistency
+        // Custom validation for working days and break consistency
         $validator->after(function ($validator) use ($request) {
-            if ($request->break_start && !$request->break_end) {
-                $validator->errors()->add('break_end', 'Break end time is required when break start is provided');
+            // If either start_time or end_time is provided, both must be provided
+            if (($request->start_time && !$request->end_time) || (!$request->start_time && $request->end_time)) {
+                $validator->errors()->add('working_times', 'Both start time and end time must be provided for working days');
             }
-            if (!$request->break_start && $request->break_end) {
-                $validator->errors()->add('break_start', 'Break start time is required when break end is provided');
+            
+            // If both times are provided, end_time must be after start_time
+            if ($request->start_time && $request->end_time && $request->start_time >= $request->end_time) {
+                $validator->errors()->add('end_time', 'End time must be after start time');
+            }
+            
+            // Break time validation only applies to working days
+            if ($request->start_time && $request->end_time) {
+                if ($request->break_start && !$request->break_end) {
+                    $validator->errors()->add('break_end', 'Break end time is required when break start is provided');
+                }
+                if (!$request->break_start && $request->break_end) {
+                    $validator->errors()->add('break_start', 'Break start time is required when break end is provided');
+                }
+                
+                // Validate break times are within working hours
+                if ($request->break_start && $request->break_end) {
+                    if ($request->break_start <= $request->start_time || $request->break_start >= $request->end_time) {
+                        $validator->errors()->add('break_start', 'Break start must be after work start and before work end');
+                    }
+                    if ($request->break_end <= $request->break_start || $request->break_end >= $request->end_time) {
+                        $validator->errors()->add('break_end', 'Break end must be after break start and before work end');
+                    }
+                }
             }
         });
 
@@ -258,32 +281,49 @@ class WorkingHourController extends Controller
 
         // Validate input data
         $validator = Validator::make($request->all(), [
-            'start_time' => 'sometimes|required|date_format:H:i',
-            'end_time' => 'sometimes|required|date_format:H:i|after:start_time',
+            'start_time' => 'nullable|date_format:H:i',
+            'end_time' => 'nullable|date_format:H:i',
             'break_start' => 'nullable|date_format:H:i',
             'break_end' => 'nullable|date_format:H:i'
         ]);
 
-        // Custom validation for break times
+        // Custom validation for working days and break times
         $validator->after(function ($validator) use ($request, $workingHour) {
-            $startTime = $request->get('start_time', $workingHour->start_time);
-            $endTime = $request->get('end_time', $workingHour->end_time);
+            $startTime = $request->has('start_time') ? $request->start_time : $workingHour->start_time;
+            $endTime = $request->has('end_time') ? $request->end_time : $workingHour->end_time;
             $breakStart = $request->get('break_start');
             $breakEnd = $request->get('break_end');
 
-            // If break times are provided, validate them
-            if ($breakStart && $breakEnd) {
-                if ($breakStart >= $endTime || $breakStart <= $startTime) {
-                    $validator->errors()->add('break_start', 'Break start must be after work start and before work end');
+            // If either start_time or end_time is being updated, both must be provided or both must be null
+            if ($request->has('start_time') || $request->has('end_time')) {
+                if (($startTime && !$endTime) || (!$startTime && $endTime)) {
+                    $validator->errors()->add('working_times', 'Both start time and end time must be provided for working days, or both must be null for non-working days');
                 }
-                if ($breakEnd <= $breakStart || $breakEnd >= $endTime) {
-                    $validator->errors()->add('break_end', 'Break end must be after break start and before work end');
+                
+                // If both times are provided, end_time must be after start_time
+                if ($startTime && $endTime && $startTime >= $endTime) {
+                    $validator->errors()->add('end_time', 'End time must be after start time');
                 }
             }
-            
-            // Both break times must be provided together
-            if (($breakStart && !$breakEnd) || (!$breakStart && $breakEnd)) {
-                $validator->errors()->add('break_times', 'Both break start and end times must be provided together');
+
+            // Break time validation only applies to working days
+            if ($startTime && $endTime) {
+                if ($breakStart && !$breakEnd) {
+                    $validator->errors()->add('break_end', 'Break end time is required when break start is provided');
+                }
+                if (!$breakStart && $breakEnd) {
+                    $validator->errors()->add('break_start', 'Break start time is required when break end is provided');
+                }
+                
+                // Validate break times are within working hours
+                if ($breakStart && $breakEnd) {
+                    if ($breakStart <= $startTime || $breakStart >= $endTime) {
+                        $validator->errors()->add('break_start', 'Break start must be after work start and before work end');
+                    }
+                    if ($breakEnd <= $breakStart || $breakEnd >= $endTime) {
+                        $validator->errors()->add('break_end', 'Break end must be after break start and before work end');
+                    }
+                }
             }
         });
 
@@ -430,11 +470,53 @@ class WorkingHourController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'working_hours' => 'required|array|min:1',
             'working_hours.*.weekday' => 'required|integer|min:0|max:6',
-            'working_hours.*.start_time' => 'required|date_format:H:i',
-            'working_hours.*.end_time' => 'required|date_format:H:i|after:start_time',
+            'working_hours.*.start_time' => 'nullable|date_format:H:i',
+            'working_hours.*.end_time' => 'nullable|date_format:H:i',
             'working_hours.*.break_start' => 'nullable|date_format:H:i',
-            'working_hours.*.break_end' => 'nullable|date_format:H:i|after:break_start'
+            'working_hours.*.break_end' => 'nullable|date_format:H:i'
         ]);
+
+        // Custom validation for each working hour entry
+        $validator->after(function ($validator) use ($request) {
+            $workingHours = $request->get('working_hours', []);
+            
+            foreach ($workingHours as $index => $hours) {
+                $startTime = $hours['start_time'] ?? null;
+                $endTime = $hours['end_time'] ?? null;
+                $breakStart = $hours['break_start'] ?? null;
+                $breakEnd = $hours['break_end'] ?? null;
+                
+                // If either start_time or end_time is provided, both must be provided
+                if (($startTime && !$endTime) || (!$startTime && $endTime)) {
+                    $validator->errors()->add("working_hours.{$index}.working_times", 'Both start time and end time must be provided for working days');
+                }
+                
+                // If both times are provided, end_time must be after start_time
+                if ($startTime && $endTime && $startTime >= $endTime) {
+                    $validator->errors()->add("working_hours.{$index}.end_time", 'End time must be after start time');
+                }
+                
+                // Break time validation only applies to working days
+                if ($startTime && $endTime) {
+                    if ($breakStart && !$breakEnd) {
+                        $validator->errors()->add("working_hours.{$index}.break_end", 'Break end time is required when break start is provided');
+                    }
+                    if (!$breakStart && $breakEnd) {
+                        $validator->errors()->add("working_hours.{$index}.break_start", 'Break start time is required when break end is provided');
+                    }
+                    
+                    // Validate break times are within working hours
+                    if ($breakStart && $breakEnd) {
+                        if ($breakStart <= $startTime || $breakStart >= $endTime) {
+                            $validator->errors()->add("working_hours.{$index}.break_start", 'Break start must be after work start and before work end');
+                        }
+                        if ($breakEnd <= $breakStart || $breakEnd >= $endTime) {
+                            $validator->errors()->add("working_hours.{$index}.break_end", 'Break end must be after break start and before work end');
+                        }
+                    }
+                }
+            }
+        });
 
         if ($validator->fails()) {
             Log::warning('WorkingHourController@bulkStore - Validation failed', [

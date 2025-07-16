@@ -5,10 +5,12 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Service;
+use App\Rules\ValidProfilePicture;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class EmployeeController extends Controller
@@ -246,6 +248,7 @@ class EmployeeController extends Controller
             'full_name' => 'sometimes|required|string|max:120',
             'phone' => 'nullable|string|max:40',
             'note' => 'nullable|string|max:1000',
+            'profile_picture' => ['nullable', new ValidProfilePicture],
             'service_ids' => 'nullable|array',
             'service_ids.*' => 'integer|exists:services,id'
         ]);
@@ -279,6 +282,23 @@ class EmployeeController extends Controller
             }
             if ($request->has('note')) {
                 $updateData['note'] = $request->note;
+            }
+            
+            // Handle profile picture upload
+            if ($request->hasFile('profile_picture')) {
+                // Delete old profile picture if exists
+                if ($employee->profile_picture && Storage::disk('public')->exists($employee->profile_picture)) {
+                    Storage::disk('public')->delete($employee->profile_picture);
+                }
+                
+                // Store new profile picture
+                $profilePicturePath = $request->file('profile_picture')->store('employee-profiles', 'public');
+                $updateData['profile_picture'] = $profilePicturePath;
+                
+                Log::info('Profile picture uploaded', [
+                    'employee_id' => $employee->id,
+                    'file_path' => $profilePicturePath
+                ]);
             }
             
             if (!empty($updateData)) {
@@ -330,6 +350,59 @@ class EmployeeController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Unable to update employee'
+            ], 500);
+        }
+    }
+    
+    /**
+     * Remove employee profile picture
+     *
+     * @param Employee $employee
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function removeProfilePicture(Employee $employee)
+    {
+        Log::info('Employee profile picture removal attempt', [
+            'employee_id' => $employee->id,
+            'user_id' => auth()->id(),
+            'current_profile_picture' => $employee->profile_picture
+        ]);
+
+        try {
+            // Delete the profile picture file if it exists
+            if ($employee->profile_picture && Storage::disk('public')->exists($employee->profile_picture)) {
+                Storage::disk('public')->delete($employee->profile_picture);
+                
+                Log::info('Profile picture file deleted', [
+                    'employee_id' => $employee->id,
+                    'file_path' => $employee->profile_picture
+                ]);
+            }
+            
+            // Update the employee record to remove the profile picture reference
+            $employee->update(['profile_picture' => null]);
+            
+            Log::info('Employee profile picture removed successfully', [
+                'employee_id' => $employee->id,
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile picture removed successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Employee profile picture removal failed', [
+                'employee_id' => $employee->id,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Unable to remove profile picture'
             ], 500);
         }
     }
@@ -447,6 +520,62 @@ class EmployeeController extends Controller
             Log::error('Failed to get employees by service', [
                 'service_id' => $request->service_id,
                 'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Unable to retrieve employees'
+            ], 500);
+        }
+    }
+
+    /**
+     * Display a simplified listing of employees for clients
+     * Shows only public information needed for service selection
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function clientIndex(Request $request)
+    {
+        Log::info('Client employees list requested', [
+            'user_id' => auth()->id(),
+            'user_role' => auth()->user()->role,
+            'request_params' => $request->all()
+        ]);
+
+        try {
+            $query = Employee::with(['services' => function ($query) {
+                $query->select('services.id', 'services.name', 'services.duration_min', 'services.price_dhs');
+            }]);
+            
+            // Filter by service if specified
+            if ($request->has('service_id')) {
+                $query->whereHas('services', function ($q) use ($request) {
+                    $q->where('service_id', $request->service_id);
+                });
+            }
+            
+            // Only return public fields for clients
+            $employees = $query->select('id', 'full_name', 'note')
+                ->orderBy('full_name')
+                ->get();
+
+            Log::info('Client employees list retrieved successfully', [
+                'count' => $employees->count(),
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $employees
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve client employees list', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
             ]);
             
             return response()->json([

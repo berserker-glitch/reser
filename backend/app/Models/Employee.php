@@ -18,6 +18,7 @@ class Employee extends Model
         'user_id',
         'full_name',
         'phone',
+        'profile_picture',
         'note',
     ];
 
@@ -35,14 +36,6 @@ class Employee extends Model
     public function services()
     {
         return $this->belongsToMany(Service::class, 'employee_service');
-    }
-
-    /**
-     * Get the working hours for the employee.
-     */
-    public function workingHours()
-    {
-        return $this->hasMany(WorkingHour::class);
     }
 
     /**

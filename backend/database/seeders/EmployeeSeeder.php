@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\User;
 use App\Models\Service;
 use App\Models\WorkingHour;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeSeeder extends Seeder
 {
@@ -58,6 +59,13 @@ class EmployeeSeeder extends Seeder
             // Attach services
             $services = Service::whereIn('name', $employeeData['services'])->get();
             $employee->services()->attach($services->pluck('id'));
+
+            Log::info('Seeding services for employee', [
+                'employee' => $employee->full_name,
+                'services_to_find' => $employeeData['services'],
+                'services_found' => $services->pluck('name')->toArray(),
+                'service_ids_attached' => $services->pluck('id')->toArray(),
+            ]);
 
             // Create working hours (Monday to Saturday, 9:00-18:00, break 12:00-13:00)
             for ($day = 1; $day <= 6; $day++) {

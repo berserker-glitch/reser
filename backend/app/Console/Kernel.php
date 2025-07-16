@@ -17,8 +17,7 @@ class Kernel extends ConsoleKernel
     {
         // Schedule holiday import command to run yearly on December 31st at 23:30
         $schedule->command('holidays:import')
-            ->yearly()
-            ->at('23:30')
+            ->yearlyOn(12, 31, '23:30')
             ->onOneServer()
             ->withoutOverlapping()
             ->onFailure(function () {
@@ -48,5 +47,6 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         \App\Console\Commands\ImportHolidays::class,
+        \App\Console\Commands\SetupWorkingHours::class,
     ];
 } 
