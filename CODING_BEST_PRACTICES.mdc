@@ -67,6 +67,7 @@
 - Mock external dependencies in tests.
 - Ensure >90% test coverage for new features.
 - After every major change, manually test all critical flows (admin and client) to catch regressions.
+- Implement Phase-Based Debugging & Verification: After completing each development phase or major feature, conduct a dedicated debugging session. Run all relevant tests (unit, integration, and E2E), manually verify the new functionality and related user flows, and check application logs for any new warnings or errors. Do not proceed to the next phase until the current one is stable and regression-free.
 
 # Documentation
 - Write clear, concise code comments (JSDoc/TSDoc for TS, PHPDoc for PHP).
@@ -77,6 +78,8 @@
 
 # Development Workflow
 - Pin all dependency versions in `package.json` and `composer.json` to ensure reproducible builds.
+- Verify Environment Prerequisites: Before starting a new project or feature, confirm that all required environment versions are correctly installed and active (e.g., PHP, Node.js, Python). Document these prerequisites in the `README.md`.
+- Regularly Validate Production Builds: For frontend applications, frequently run the production build command (e.g., `npm run build`) throughout the development process. This helps catch build-time errors, optimization issues, and type conflicts that may not be visible in the development server.
 - Use version control with meaningful, conventional commit messages.
 - Work on features in separate branches; use pull requests for review.
 - Run automated tests and code quality checks before merging.
@@ -146,6 +149,8 @@
 - [ ] Latest best practices and documentation reviewed for all major libraries used
 - [ ] Code is modular, reusable, and token-efficient
 - [ ] Existing components reviewed for reuse, and new components documented
+- [ ] All development phases are followed by a dedicated debugging and verification step
+- [ ] Environment prerequisites and production build validated
 
 ---
 
