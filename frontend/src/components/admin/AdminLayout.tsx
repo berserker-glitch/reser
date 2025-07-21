@@ -161,7 +161,19 @@ function AdminLayout() {
   };
 
   return (
-    <Box sx={{ bgcolor: '#e5e5e5', width: '100vw', height: '100vh', display: 'flex' }}>
+    <Box sx={{ 
+      bgcolor: '#ffffff', 
+      width: '100vw', 
+      minHeight: '100vh',
+      height: '100vh',
+      display: 'flex',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      overflow: 'hidden',
+      margin: 0,
+      padding: 0,
+    }}>
       {/* Main container */}
       <Paper 
         elevation={0} 
@@ -172,21 +184,25 @@ function AdminLayout() {
           height: '100vh',
           border: 'none',
           boxShadow: 'none',
+          overflow: 'hidden',
+          bgcolor: '#ffffff',
+          margin: 0,
+          padding: 0,
         }}
       >
         {/* Left Navigation Drawer - Collapsed with Drag & Drop */}
         {/* Shared Drawer Content */}
         {(() => {
           const drawerContent = (
-            <>
+            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', margin: 0, padding: 0 }}>
               {/* Logo Avatar */}
-              <Box sx={{ p: 1, display: 'flex', justifyContent: 'center', mt: 1 }}>
+              <Box sx={{ p: 0.5, display: 'flex', justifyContent: 'center', mt: 0.5 }}>
                 <Avatar 
                   sx={{ 
-                    width: 40, 
-                    height: 40, 
+                    width: 36, 
+                    height: 36, 
                     bgcolor: 'primary.main',
-                    fontSize: '1.2rem',
+                    fontSize: '1.1rem',
                     fontWeight: 700,
                   }}
                 >
@@ -204,7 +220,7 @@ function AdminLayout() {
                   items={navigationItems.map(item => item.id)} 
                   strategy={verticalListSortingStrategy}
                 >
-                  <List dense sx={{ mt: 2, px: 1 }}>
+                  <List dense sx={{ mt: 1, px: 0.5 }}>
                     {navigationItems.map((item, index) => (
                       <DraggableNavItem
                         key={item.id}
@@ -237,7 +253,7 @@ function AdminLayout() {
                   </IconButton>
                 </Tooltip>
               </Box>
-            </>
+            </Box>
           );
 
           return (
@@ -256,7 +272,9 @@ function AdminLayout() {
                       width: drawerWidth,
                       boxSizing: 'border-box',
                       border: 'none',
-                      bgcolor: 'background.paper',
+                      bgcolor: '#ffffff',
+                      borderRight: '1px solid',
+                      borderColor: 'divider',
                     },
                   }}
                 >
@@ -271,14 +289,21 @@ function AdminLayout() {
                   sx={{
                     width: drawerWidth,
                     flexShrink: 0,
+                    '& .MuiDrawer-root': {
+                      position: 'relative',
+                    },
                     '& .MuiDrawer-paper': {
                       width: drawerWidth,
                       boxSizing: 'border-box',
-                      position: 'fixed',
+                      position: 'relative',
                       height: '100vh',
                       border: 'none',
-                      bgcolor: 'background.paper',
+                      bgcolor: '#ffffff',
+                      borderRight: '1px solid',
+                      borderColor: 'divider',
                       zIndex: 1200,
+                      margin: 0,
+                      padding: 0,
                     },
                   }}
                 >
@@ -294,20 +319,27 @@ function AdminLayout() {
           flexGrow: 1, 
           display: 'flex', 
           flexDirection: 'column',
-          marginLeft: isMobile ? 0 : `${drawerWidth}px`,
-          width: isMobile ? '100%' : `calc(100% - ${drawerWidth}px)`,
+          width: '100%',
+          height: '100vh',
+          overflow: 'hidden',
+          margin: 0,
+          padding: 0,
         }}>
-          {/* Top Horizontal Bar - Sticky Header */}
+          {/* Top Horizontal Bar - Fixed Header */}
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               px: isMobile ? 2 : 3,
-              py: 2,
-              position: 'sticky',
-              top: 0,
+              py: 1.5,
+              bgcolor: '#ffffff',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
               zIndex: 1100,
+              flexShrink: 0,
+              margin: 0,
+              width: '100%',
             }}
           >
             {/* Left side - Mobile Menu Button, Breadcrumb and Search */}
@@ -347,7 +379,16 @@ function AdminLayout() {
             {/* Center - Page Links (Hidden on mobile) */}
             {!isMobile && (
               <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button color="inherit" size="small">
+                <Button 
+                  color="inherit" 
+                  size="small"
+                  onClick={() => navigate('/admin/calendar')}
+                  sx={{ 
+                    '&:hover': { 
+                      bgcolor: 'rgba(255,255,255,0.1)' 
+                    } 
+                  }}
+                >
                   Mes calendriers
                 </Button>
                 <Button color="inherit" size="small">
@@ -439,7 +480,15 @@ function AdminLayout() {
           </Box>
 
           {/* Main Content */}
-          <Box sx={{ flexGrow: 1, p: 3 }}>
+          <Box sx={{ 
+            flexGrow: 1, 
+            p: 2, 
+            m: 0,
+            overflow: 'auto',
+            bgcolor: '#ffffff',
+            minHeight: 0, // Important for flex child to scroll
+            width: '100%',
+          }}>
             <Outlet />
           </Box>
         </Box>

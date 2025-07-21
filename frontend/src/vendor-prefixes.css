@@ -1,0 +1,56 @@
+/* Vendor prefix fixes for browser compatibility */
+/* Suppress CSS warnings in Firefox and other browsers */
+
+/* Fix webkit text size adjust warnings */
+input, textarea, select {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Fix moz focus inner warnings */
+button::-moz-focus-inner,
+input[type="button"]::-moz-focus-inner,
+input[type="submit"]::-moz-focus-inner,
+input[type="reset"]::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* Fix ms input placeholder warnings */
+input::-ms-input-placeholder,
+textarea::-ms-input-placeholder {
+  color: #999;
+  opacity: 1;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #999;
+  opacity: 1;
+}
+
+/* Fix webkit box align warnings for Flexbox */
+.MuiBox-root,
+.MuiContainer-root,
+.MuiGrid-root {
+  -webkit-box-align: stretch;
+  -ms-flex-align: stretch;
+  align-items: stretch;
+}
+
+/* Fix font smoothing warnings */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Additional fixes for material-ui warnings */
+.MuiButton-root::-moz-focus-inner,
+.MuiIconButton-root::-moz-focus-inner,
+.MuiFab-root::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+} 

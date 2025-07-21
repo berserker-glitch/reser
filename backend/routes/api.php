@@ -44,6 +44,14 @@ Route::get('/services', function () {
     }
 });
 
+// Public availability routes (for clients to check before registering)
+Route::get('/availability', [AvailabilityController::class, 'index']);
+Route::post('/availability/check', [AvailabilityController::class, 'check']);
+Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
+
+// Public employees list (for clients to see available staff)
+Route::get('/employees', [EmployeeController::class, 'clientIndex']);
+
 // Health check endpoint (no authentication required)
 Route::get('/health', function () {
     return response()->json([
@@ -166,14 +174,6 @@ Route::group([
     
     // Reservations routes (accessible by both clients and owners)
     Route::apiResource('reservations', ReservationController::class);
-    
-    // Availability routes (accessible by both clients and owners)
-    Route::get('/availability', [AvailabilityController::class, 'index']);
-    Route::post('/availability/check', [AvailabilityController::class, 'check']);
-    Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
-
-    // Employee list for clients (read-only)
-    Route::get('/employees', [EmployeeController::class, 'clientIndex']);
 });
 
 // Public working hours endpoint - show all employees working every day
@@ -233,10 +233,25 @@ Route::group([
     Route::get('services/with-employees', [ServiceController::class, 'withEmployees']);
     Route::get('services/statistics', [ServiceController::class, 'statistics']);
     
+    // Holiday management (full CRUD for owners)
+    Route::get('holidays/settings', [\App\Http\Controllers\API\HolidayController::class, 'getSettings']);
+    Route::put('holidays/settings', [\App\Http\Controllers\API\HolidayController::class, 'updateSettings']);
+    Route::post('holidays/import-moroccan', [\App\Http\Controllers\API\HolidayController::class, 'importMoroccanHolidays']);
+    Route::post('holidays/bulk-action', [\App\Http\Controllers\API\HolidayController::class, 'bulkAction']);
+    
+    // Custom routes for holidays that handle composite keys
+    Route::get('holidays', [\App\Http\Controllers\API\HolidayController::class, 'index']);
+    Route::post('holidays', [\App\Http\Controllers\API\HolidayController::class, 'store']);
+    Route::delete('holidays', [\App\Http\Controllers\API\HolidayController::class, 'destroy']); // DELETE without ID, data in body
+    Route::put('holidays', [\App\Http\Controllers\API\HolidayController::class, 'update']);
+    
     // Working hours management (full CRUD for owners)
     Route::apiResource('working-hours', WorkingHourController::class);
     Route::post('working-hours/bulk', [WorkingHourController::class, 'bulkStore']);
     Route::get('employees/{employee}/working-hours', [WorkingHourController::class, 'employeeSummary']);
+    
+    // Reservation management (full CRUD for owners)
+    Route::apiResource('reservations', ReservationController::class);
     
     // Dashboard and statistics
     Route::get('/dashboard/stats', function () {

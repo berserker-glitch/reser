@@ -66,3 +66,36 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Browser compatibility fixes to suppress CSS warnings */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+textarea {
+  /* Fix webkit text size adjust warnings */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Fix moz focus inner warnings */
+button::-moz-focus-inner,
+input[type="button"]::-moz-focus-inner,
+input[type="submit"]::-moz-focus-inner,
+input[type="reset"]::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+
+/* Fix ms input placeholder warnings */
+input::-ms-input-placeholder,
+textarea::-ms-input-placeholder {
+  color: #999;
+}
+
+/* Fix webkit box align warnings */
+.MuiBox-root {
+  -webkit-box-align: stretch !important;
+  -ms-flex-align: stretch !important;
+  align-items: stretch !important;
+}

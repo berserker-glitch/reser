@@ -30,7 +30,7 @@ class EmployeeController extends Controller
         ]);
 
         try {
-            $query = Employee::with(['services', 'workingHours', 'user']);
+            $query = Employee::with(['services', 'user']);
             
             // Apply filters
             if ($request->has('service_id')) {
@@ -129,12 +129,12 @@ class EmployeeController extends Controller
             }
             
             // Clear availability cache since new employee affects availability
-            Cache::tags(['availability'])->flush();
+            Cache::flush();
             
             DB::commit();
             
             // Load relationships for response
-            $employee->load(['services', 'workingHours', 'user']);
+            $employee->load(['services', 'user']);
             
             Log::info('Employee created successfully', [
                 'employee_id' => $employee->id,
@@ -183,7 +183,6 @@ class EmployeeController extends Controller
             // Load relationships with additional data
             $employee->load([
                 'services', 
-                'workingHours', 
                 'user',
                 'reservations' => function ($query) {
                     $query->with(['service', 'client'])
@@ -196,7 +195,7 @@ class EmployeeController extends Controller
             // Add some statistics
             $employee->statistics = [
                 'total_services' => $employee->services->count(),
-                'working_days' => $employee->workingHours->count(),
+                'working_days' => 0, // No working hours relationship
                 'upcoming_reservations' => $employee->reservations->count(),
                 'total_reservations' => $employee->reservations()->count(),
                 'completed_reservations' => $employee->reservations()
@@ -315,13 +314,13 @@ class EmployeeController extends Controller
                 }
                 
                 // Clear availability cache since service assignments affect availability
-                Cache::tags(['availability'])->flush();
+                Cache::flush();
             }
             
             DB::commit();
             
             // Load fresh data with relationships
-            $employee->load(['services', 'workingHours', 'user']);
+            $employee->load(['services', 'user']);
             
             Log::info('Employee updated successfully', [
                 'employee_id' => $employee->id,
@@ -448,14 +447,13 @@ class EmployeeController extends Controller
             // Detach all services
             $employee->services()->detach();
             
-            // Delete working hours
-            $employee->workingHours()->delete();
+            // Working hours are global, no need to delete employee-specific hours
             
             // Delete the employee (reservations will be kept for historical purposes)
             $employee->delete();
             
             // Clear availability cache
-            Cache::tags(['availability'])->flush();
+            Cache::flush();
             
             DB::commit();
             
@@ -509,7 +507,7 @@ class EmployeeController extends Controller
         try {
             $employees = Employee::whereHas('services', function ($query) use ($request) {
                 $query->where('service_id', $request->service_id);
-            })->with(['services', 'workingHours'])->get();
+            })->with(['services'])->get();
             
             return response()->json([
                 'success' => true,
@@ -539,8 +537,8 @@ class EmployeeController extends Controller
     public function clientIndex(Request $request)
     {
         Log::info('Client employees list requested', [
-            'user_id' => auth()->id(),
-            'user_role' => auth()->user()->role,
+            'user_id' => auth()->id() ?? 'guest',
+            'user_role' => auth()->check() ? auth()->user()->role : 'guest',
             'request_params' => $request->all()
         ]);
 
@@ -557,13 +555,13 @@ class EmployeeController extends Controller
             }
             
             // Only return public fields for clients
-            $employees = $query->select('id', 'full_name', 'note')
+            $employees = $query->select('id', 'full_name', 'note', 'profile_picture')
                 ->orderBy('full_name')
                 ->get();
 
             Log::info('Client employees list retrieved successfully', [
                 'count' => $employees->count(),
-                'user_id' => auth()->id()
+                'user_id' => auth()->id() ?? 'guest'
             ]);
 
             return response()->json([
@@ -574,7 +572,7 @@ class EmployeeController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to retrieve client employees list', [
                 'error' => $e->getMessage(),
-                'user_id' => auth()->id(),
+                'user_id' => auth()->id() ?? 'guest',
                 'trace' => $e->getTraceAsString()
             ]);
             

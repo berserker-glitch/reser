@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ServiceController - Manages salon services (OWNER only)
@@ -213,7 +214,9 @@ class ServiceController extends Controller
             'name' => 'sometimes|required|string|max:120|unique:services,name,' . $service->id,
             'description' => 'nullable|string|max:500',
             'duration_min' => 'sometimes|required|integer|min:15|max:480',
-            'price_dhs' => 'sometimes|required|numeric|min:0|max:9999.99'
+            'price_dhs' => 'sometimes|required|numeric|min:0|max:9999.99',
+            'employee_ids' => 'nullable|array',
+            'employee_ids.*' => 'integer|exists:employees,id'
         ]);
 
         if ($validator->fails()) {
@@ -230,12 +233,35 @@ class ServiceController extends Controller
         }
 
         try {
+            DB::beginTransaction();
+            
             $originalData = $service->toArray();
 
             // Update only provided fields
             $service->update($request->only([
                 'name', 'description', 'duration_min', 'price_dhs'
             ]));
+
+            // Update employee assignments if provided
+            if ($request->has('employee_ids')) {
+                if (is_array($request->employee_ids)) {
+                    $service->employees()->sync($request->employee_ids);
+                } else {
+                    // If employee_ids is null or empty, remove all employees
+                    $service->employees()->detach();
+                }
+                
+                Log::info('ServiceController@update - Employee assignments updated', [
+                    'service_id' => $service->id,
+                    'employee_ids' => $request->employee_ids,
+                    'user_id' => auth()->id()
+                ]);
+            }
+
+            DB::commit();
+
+            // Load fresh data with relationships
+            $service->load(['employees']);
 
             Log::info('ServiceController@update - Service updated successfully', [
                 'service_id' => $service->id,
@@ -244,9 +270,15 @@ class ServiceController extends Controller
                 'user_id' => auth()->id()
             ]);
 
-            return response()->json($service->fresh());
+            return response()->json([
+                'success' => true,
+                'message' => 'Service updated successfully',
+                'data' => $service
+            ]);
 
         } catch (\Exception $e) {
+            DB::rollBack();
+            
             Log::error('ServiceController@update - Failed to update service', [
                 'service_id' => $service->id,
                 'error' => $e->getMessage(),
@@ -256,6 +288,7 @@ class ServiceController extends Controller
             ]);
 
             return response()->json([
+                'success' => false,
                 'message' => 'Failed to update service',
                 'error' => 'Internal server error'
             ], 500);

@@ -132,12 +132,29 @@ class ReservationController extends Controller
             'request_data' => $request->except(['password'])
         ]);
 
-        // Validate request data
-        $validator = Validator::make($request->all(), [
+        // Determine reservation type
+        $isManual = $request->has('type') && $request->type === 'manual';
+        $user = auth()->user();
+
+        // Validate request data based on type
+        $rules = [
             'service_id' => 'required|integer|exists:services,id',
             'employee_id' => 'nullable|integer|exists:employees,id',
-            'start_at' => 'required|date_format:Y-m-d\TH:i:s\Z|after:now'
-        ]);
+            'start_at' => 'required|date',
+        ];
+
+        if ($isManual && $user->role === 'OWNER') {
+            // Manual reservation by admin
+            $rules['type'] = 'required|in:manual';
+            $rules['client_full_name'] = 'required|string|max:120';
+            $rules['client_phone'] = 'required|string|max:40';
+            // Remove after:now for admin reservations
+        } else {
+            // Online reservation by client
+            $rules['start_at'] .= '|after:now';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
         
         if ($validator->fails()) {
             Log::warning('Reservation creation validation failed', [
@@ -199,17 +216,29 @@ class ReservationController extends Controller
             }
             
             // Create the reservation
-            $reservation = Reservation::create([
-                'client_id' => auth()->id(),
+            $reservationData = [
                 'employee_id' => $employeeId,
                 'service_id' => $request->service_id,
                 'start_at' => $startAt,
                 'end_at' => $endAt,
-                'status' => 'CONFIRMED'
-            ]);
+                'status' => 'CONFIRMED',
+                'type' => $isManual ? 'manual' : 'online'
+            ];
+
+            if ($isManual && $user->role === 'OWNER') {
+                // Manual reservation by admin
+                $reservationData['client_id'] = null; // No registered user
+                $reservationData['client_full_name'] = $request->client_full_name;
+                $reservationData['client_phone'] = $request->client_phone;
+            } else {
+                // Online reservation by authenticated client
+                $reservationData['client_id'] = auth()->id();
+            }
+
+            $reservation = Reservation::create($reservationData);
             
             // Clear availability cache
-            Cache::tags(['availability'])->flush();
+            Cache::flush();
             
             DB::commit();
             
@@ -421,7 +450,7 @@ class ReservationController extends Controller
             $reservation->update($updateData);
             
             // Clear availability cache
-            Cache::tags(['availability'])->flush();
+            Cache::flush();
             
             DB::commit();
             
@@ -495,7 +524,7 @@ class ReservationController extends Controller
                 $reservation->delete();
                 
                 // Clear availability cache
-                Cache::tags(['availability'])->flush();
+                Cache::flush();
                 
                 DB::commit();
                 

@@ -29,15 +29,28 @@ export default function HomePage() {
           <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
             Système de gestion pour votre salon de coiffure
           </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<LoginOutlined />}
-            onClick={() => navigate('/login')}
-            sx={{ py: 1.5, px: 4 }}
-          >
-            Se connecter
-          </Button>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', maxWidth: 300 }}>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<LoginOutlined />}
+              onClick={() => navigate('/client/login')}
+              sx={{ py: 1.5, px: 4 }}
+            >
+              Réserver un rendez-vous
+            </Button>
+            
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<LoginOutlined />}
+              onClick={() => navigate('/login')}
+              sx={{ py: 1.5, px: 4 }}
+            >
+              Administration
+            </Button>
+          </Box>
         </Paper>
       </Box>
     </Container>

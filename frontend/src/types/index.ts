@@ -13,11 +13,43 @@ export interface User {
 export interface Service {
   id: number
   name: string
-  description: string
+  description?: string
   duration_min: number
   price_dhs: number
   created_at: string
   updated_at: string
+  employees?: Employee[]
+  reservations_count?: number
+  active_employees_count?: number
+}
+
+// Service form data for creating/updating services
+export interface ServiceFormData {
+  name: string
+  description?: string
+  duration_min: number
+  price_dhs: number
+}
+
+// Service filters for search and sorting
+export interface ServiceFilters {
+  search?: string
+  sort_by?: 'name' | 'price_dhs' | 'duration_min' | 'created_at'
+  sort_direction?: 'asc' | 'desc'
+}
+
+// Service statistics for dashboard
+export interface ServiceStatistics {
+  total_services: number
+  average_price: number
+  average_duration: number
+  most_popular_service: Service | null
+  revenue_this_month: number
+  services_by_duration: {
+    short: number // < 60 min
+    medium: number // 60-120 min
+    long: number // > 120 min
+  }
 }
 
 // Employee related types
@@ -26,10 +58,20 @@ export interface Employee {
   user_id: number
   full_name: string
   phone?: string
+  profile_picture?: string
   note?: string
-  specialties?: Service[] // joined services
+  services?: Service[] // joined services (renamed from specialties for consistency)
   created_at: string
   updated_at: string
+}
+
+// Employee form data for creating/updating employees
+export interface EmployeeFormData {
+  full_name: string
+  phone?: string
+  profile_picture?: string
+  note?: string
+  service_ids?: number[] // for service assignments
 }
 
 // Working hours types
@@ -48,12 +90,15 @@ export interface WorkingHour {
 // Reservation related types
 export interface Reservation {
   id: number
-  client_id: number
+  client_id?: number | null
   employee_id: number
   service_id: number
   start_at: string // ISO date string
   end_at: string   // ISO date string
   status: 'REQUESTED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+  type: 'online' | 'manual'
+  client_phone?: string | null
+  client_full_name?: string | null
   created_at: string
   updated_at: string
   // Relationships
@@ -62,10 +107,32 @@ export interface Reservation {
   service?: Service
 }
 
-// Holiday types
+// Reservation form data for creating/updating reservations
+export interface ReservationFormData {
+  client_id?: number | null
+  employee_id: number
+  service_id: number
+  start_at: string // ISO date string
+  status: 'REQUESTED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+  type: 'online' | 'manual'
+  client_phone?: string
+  client_full_name?: string
+}
+
+// Holiday types (recurring yearly, simplified table)
 export interface Holiday {
-  id: string // Date in YYYY-MM-DD format
+  type: 'standard' | 'custom'
   name: string
+  month: number // 1-12
+  day: number   // 1-31
+  date?: string // Optional: Full date when converted for a specific year
+}
+
+export interface HolidaySettings {
+  id?: number
+  holiday_system_type: 'standard' | 'custom'
+  created_at?: string
+  updated_at?: string
 }
 
 // API Response types

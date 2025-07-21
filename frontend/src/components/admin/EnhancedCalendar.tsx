@@ -505,6 +505,8 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
                             </Avatar>
                           </ListItemAvatar>
                           <ListItemText
+                            primaryTypographyProps={{ component: 'div' }}
+                            secondaryTypographyProps={{ component: 'div' }}
                             primary={
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>

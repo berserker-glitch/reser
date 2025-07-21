@@ -96,13 +96,11 @@ class AvailabilityService
     {
         $weekday = $date->dayOfWeek; // 0 = Sunday, 6 = Saturday
         
-        // Get working hours for this weekday
-        $workingHour = WorkingHour::where('employee_id', $employee->id)
-            ->where('weekday', $weekday)
-            ->first();
+        // Get global working hours for this weekday (no longer employee-specific)
+        $workingHour = WorkingHour::where('weekday', $weekday)->first();
             
         if (!$workingHour || !$workingHour->start_time || !$workingHour->end_time) {
-            Log::debug('No working hours or non-working day for employee', [
+            Log::debug('No working hours or non-working day', [
                 'employee_id' => $employee->id,
                 'weekday' => $weekday,
                 'date' => $date->format('Y-m-d'),
