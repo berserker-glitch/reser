@@ -27,16 +27,27 @@ export const fetchNationalHolidays = async (): Promise<Holiday[]> => {
                 localStorage.getItem('token');
   
   try {
-    // Try authenticated request first
     let response;
+    
+    // Try authenticated request first if token exists
     if (token) {
-      response = await axios.get('/api/holidays', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
+        response = await axios.get('/api/holidays', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch (authError: any) {
+        // If authentication fails, fall back to public endpoint
+        if (authError.response?.status === 401) {
+          console.log('Auth failed, falling back to public holidays endpoint');
+          response = await axios.get('/api/public/holidays');
+        } else {
+          throw authError;
+        }
+      }
     } else {
-      // Fallback to public endpoint for unauthenticated users
+      // No token, use public endpoint directly
       response = await axios.get('/api/public/holidays');
     }
     

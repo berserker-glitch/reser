@@ -52,17 +52,28 @@ export const getAllWorkingHours = async (): Promise<WorkingHoursGroup[]> => {
                   localStorage.getItem('token');
 
     let response;
+    
+    // Try authenticated request first if token exists
     if (token) {
-      // Try authenticated request first
-      response = await axios.get('/api/working-hours', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
+      try {
+        response = await axios.get('/api/working-hours', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          }
+        });
+      } catch (authError: any) {
+        // If authentication fails, fall back to public endpoint
+        if (authError.response?.status === 401) {
+          console.log('Auth failed, falling back to public working hours endpoint');
+          response = await axios.get('/api/public/working-hours');
+        } else {
+          throw authError;
         }
-      });
+      }
     } else {
-      // Fallback to public endpoint for unauthenticated users
+      // No token, use public endpoint directly
       response = await axios.get('/api/public/working-hours');
     }
     

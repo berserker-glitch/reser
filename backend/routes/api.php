@@ -52,11 +52,58 @@ Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
 // Public holidays route (for clients to see unavailable dates)
 Route::get('/public/holidays', function () {
     try {
-        $holidays = \App\Models\Holiday::where('is_active', true)->get();
-        return response()->json($holidays);
+        // Get current holiday settings to determine which holidays to show
+        $settings = \App\Models\HolidaySetting::current();
+        
+        $currentYear = date('Y');
+        $query = \App\Models\Holiday::query();
+        
+        // Filter holidays based on the owner's system choice
+        if ($settings->holiday_system_type === 'standard') {
+            $query->where('type', 'standard');
+        } elseif ($settings->holiday_system_type === 'custom') {
+            $query->where('type', 'custom');
+        }
+        // If no setting or 'both', show all holidays (fallback)
+        
+        $holidays = $query->get();
+        
+        // Convert to full dates for the current year and format for frontend
+        $holidaysWithDates = $holidays->map(function ($holiday) use ($currentYear) {
+            $date = $holiday->getDateForYear($currentYear);
+            if ($date) {
+                return [
+                    'id' => $date, // Use the calculated date as ID for frontend compatibility
+                    'name' => $holiday->name,
+                    'type' => $holiday->type ?? 'national',
+                    'date' => $date
+                ];
+            }
+            return null;
+        })->filter(); // Remove null entries
+        
+        return response()->json($holidaysWithDates->values());
     } catch (\Exception $e) {
         return response()->json([
             'error' => 'Unable to fetch holidays',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Public holiday settings route (for clients to understand which holiday system is active)
+Route::get('/public/holiday-settings', function () {
+    try {
+        $settings = \App\Models\HolidaySetting::current();
+        return response()->json([
+            'holiday_system_type' => $settings->holiday_system_type,
+            'description' => $settings->holiday_system_type === 'standard' 
+                ? 'Moroccan national holidays' 
+                : 'Personalized holidays'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Unable to fetch holiday settings',
             'message' => $e->getMessage()
         ], 500);
     }
