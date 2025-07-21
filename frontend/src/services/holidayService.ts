@@ -23,18 +23,22 @@ export interface IslamicHoliday {
 export const fetchNationalHolidays = async (): Promise<Holiday[]> => {
   const token = localStorage.getItem('admin_token') || 
                 localStorage.getItem('access_token') || 
+                localStorage.getItem('client_token') ||
                 localStorage.getItem('token');
   
-  if (!token) {
-    throw new Error('No authentication token found');
-  }
-  
   try {
-    const response = await axios.get('/api/holidays', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    // Try authenticated request first
+    let response;
+    if (token) {
+      response = await axios.get('/api/holidays', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } else {
+      // Fallback to public endpoint for unauthenticated users
+      response = await axios.get('/api/public/holidays');
+    }
     
     return response.data.map((holiday: any) => ({
       id: holiday.id,

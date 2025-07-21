@@ -49,6 +49,63 @@ Route::get('/availability', [AvailabilityController::class, 'index']);
 Route::post('/availability/check', [AvailabilityController::class, 'check']);
 Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
 
+// Public holidays route (for clients to see unavailable dates)
+Route::get('/public/holidays', function () {
+    try {
+        $holidays = \App\Models\Holiday::where('is_active', true)->get();
+        return response()->json($holidays);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Unable to fetch holidays',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// Public working hours route (for clients to see working days)
+Route::get('/public/working-hours', function () {
+    try {
+        // Get all employees
+        $employees = \App\Models\Employee::select('id', 'full_name')->get();
+        
+        $weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        
+        // Create working schedule for all employees for all days
+        $grouped = $employees->map(function ($employee) use ($weekdays) {
+            $schedule = [];
+            
+            // Create a schedule entry for each day of the week
+            for ($weekday = 0; $weekday <= 6; $weekday++) {
+                $schedule[] = [
+                    'id' => $employee->id * 10 + $weekday, // Generate unique ID
+                    'weekday' => $weekday,
+                    'weekday_name' => $weekdays[$weekday],
+                    'start_time' => '09:00', // Default working hours
+                    'end_time' => '18:00',
+                    'break_start' => '12:00',
+                    'break_end' => '13:00',
+                    'total_hours' => 8,
+                ];
+            }
+            
+            return [
+                'employee' => [
+                    'id' => $employee->id,
+                    'full_name' => $employee->full_name,
+                ],
+                'schedule' => $schedule,
+            ];
+        });
+        
+        return response()->json($grouped);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Unable to fetch working hours',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
 // Public employees list (for clients to see available staff)
 Route::get('/employees', [EmployeeController::class, 'clientIndex']);
 

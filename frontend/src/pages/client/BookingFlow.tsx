@@ -70,6 +70,8 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import axios from 'axios';
+import { getAllHolidays, type Holiday } from '../../services/holidayService';
+import { getAllWorkingHours, isWorkingDay, type WorkingHoursGroup } from '../../services/workingHoursService';
 
 // Types
 interface Service {
@@ -168,6 +170,28 @@ const BookingFlow: React.FC = () => {
     enabled: bookingData.serviceId !== null,
   });
 
+  // Fetch holidays for current year
+  const { 
+    data: holidays = []
+  } = useQuery({
+    queryKey: ['holidays', calendarDate.getFullYear()],
+    queryFn: () => getAllHolidays(calendarDate.getFullYear()),
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days
+  });
+
+  // Fetch working hours for all employees
+  const { 
+    data: workingHours = [], 
+    error: workingHoursError
+  } = useQuery({
+    queryKey: ['working-hours'],
+    queryFn: getAllWorkingHours,
+    staleTime: 1000 * 60 * 60, // 1 hour
+    gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    retry: 2, // Retry failed requests
+  });
+
   // Fetch availability
   const { data: availability, isLoading: availabilityLoading } = useQuery({
     queryKey: ['availability', bookingData.serviceId, bookingData.employeeId, format(selectedDate, 'yyyy-MM-dd')],
@@ -236,6 +260,11 @@ const BookingFlow: React.FC = () => {
   };
 
   const handleDateSelect = (date: Date) => {
+    // Double-check that the date is selectable
+    if (!isDateSelectable(date)) {
+      return;
+    }
+    
     setSelectedDate(date);
     setBookingData(prev => ({
       ...prev,
@@ -279,6 +308,46 @@ const BookingFlow: React.FC = () => {
 
   const selectedService = servicesArray.find((s: Service) => s.id === bookingData.serviceId);
   const selectedEmployee = employeesArray.find((e: Employee) => e.id === bookingData.employeeId);
+
+  // Helper functions for date validation
+  const isHoliday = (date: Date): Holiday | undefined => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return (holidays as Holiday[]).find(h => h.id === dateStr);
+  };
+
+  const isNonWorkingDay = (date: Date): boolean => {
+    const weekday = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    
+    // If working hours failed to load, use traditional weekend logic as fallback
+    if (workingHoursError || !workingHours || workingHours.length === 0) {
+      // Fallback: Assume traditional weekend (Sunday/Saturday are non-working)
+      return weekday === 0 || weekday === 6;
+    }
+    
+    return !isWorkingDay(weekday, workingHours as WorkingHoursGroup[]);
+  };
+
+  const isDateSelectable = (date: Date): boolean => {
+    const isPast = isBefore(date, startOfDay(new Date()));
+    const holiday = isHoliday(date);
+    const nonWorking = isNonWorkingDay(date);
+    
+    return !isPast && !holiday && !nonWorking;
+  };
+
+  const getDateTooltip = (date: Date): string => {
+    if (isBefore(date, startOfDay(new Date()))) {
+      return 'Date passée';
+    }
+    const holiday = isHoliday(date);
+    if (holiday) {
+      return `Jour férié: ${holiday.name}`;
+    }
+    if (isNonWorkingDay(date)) {
+      return 'Jour non travaillé';
+    }
+    return format(date, 'EEEE dd MMMM yyyy', { locale: fr });
+  };
 
   // Calendar generation
   const generateCalendarDays = () => {
@@ -644,34 +713,141 @@ const BookingFlow: React.FC = () => {
                           const isPast = isBefore(day, startOfDay(new Date()));
                           const isSelected = isSameDay(day, selectedDate);
                           const dayIsToday = isToday(day);
+                          const holiday = isHoliday(day);
+                          const nonWorking = isNonWorkingDay(day);
+                          const selectable = isDateSelectable(day) && isCurrentMonth;
+                          const tooltip = getDateTooltip(day);
+                          
+                          // Determine button styling based on day type
+                          let buttonColor = 'inherit';
+                          let backgroundColor = 'transparent';
+                          
+                          if (!isCurrentMonth) {
+                            buttonColor = 'text.disabled';
+                          } else if (holiday) {
+                            buttonColor = 'error.main';
+                            backgroundColor = 'error.light';
+                          } else if (nonWorking) {
+                            buttonColor = 'text.secondary';
+                            backgroundColor = 'grey.100';
+                          } else if (isPast) {
+                            buttonColor = 'text.disabled';
+                          }
                           
                           return (
                             <Box key={index} sx={{ textAlign: 'center' }}>
                               <Button
-                                onClick={() => !isPast && isCurrentMonth && handleDateSelect(day)}
-                                disabled={isPast || !isCurrentMonth}
+                                onClick={() => selectable && handleDateSelect(day)}
+                                disabled={!selectable}
                                 variant={isSelected ? 'contained' : dayIsToday ? 'outlined' : 'text'}
+                                title={tooltip}
                                 sx={{
                                   minWidth: isMobile ? 40 : 50,
                                   height: isMobile ? 40 : 50,
                                   borderRadius: 2,
                                   fontSize: '1rem',
                                   fontWeight: isSelected ? 700 : 400,
-                                  color: !isCurrentMonth ? 'text.disabled' : 'inherit',
+                                  color: buttonColor,
+                                  bgcolor: isSelected ? 'primary.main' : backgroundColor,
                                   '&:hover': {
-                                    bgcolor: !isPast && isCurrentMonth ? 'primary.50' : 'transparent',
-                                    transform: !isPast && isCurrentMonth ? 'scale(1.05)' : 'none',
+                                    bgcolor: selectable ? 'primary.50' : backgroundColor,
+                                    transform: selectable ? 'scale(1.05)' : 'none',
+                                  },
+                                  '&:disabled': {
+                                    opacity: 0.6,
+                                    cursor: 'not-allowed',
                                   },
                                   transition: 'all 0.2s ease',
+                                  position: 'relative',
                                 }}
                               >
                                 {format(day, 'd')}
+                                
+                                {/* Holiday indicator */}
+                                {holiday && (
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      bottom: 2,
+                                      right: 2,
+                                      width: 6,
+                                      height: 6,
+                                      borderRadius: '50%',
+                                      bgcolor: 'error.main',
+                                    }}
+                                  />
+                                )}
+                                
+                                {/* Non-working day indicator */}
+                                {nonWorking && !holiday && (
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      bottom: 2,
+                                      right: 2,
+                                      width: 6,
+                                      height: 6,
+                                      borderRadius: '50%',
+                                      bgcolor: 'grey.500',
+                                    }}
+                                  />
+                                )}
                               </Button>
                             </Box>
                           );
                         })}
                       </Box>
                       
+                      {/* Calendar Legend */}
+                      <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                          Légende:
+                        </Typography>
+                        <Box sx={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', 
+                          gap: 2 
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ 
+                              width: 12, 
+                              height: 12, 
+                              borderRadius: '50%', 
+                              bgcolor: 'error.main' 
+                            }} />
+                            <Typography variant="caption">Jour férié</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ 
+                              width: 12, 
+                              height: 12, 
+                              borderRadius: '50%', 
+                              bgcolor: 'grey.500' 
+                            }} />
+                            <Typography variant="caption">Non travaillé</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ 
+                              width: 12, 
+                              height: 12, 
+                              borderRadius: 1, 
+                              bgcolor: 'primary.main' 
+                            }} />
+                            <Typography variant="caption">Sélectionné</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ 
+                              width: 12, 
+                              height: 12, 
+                              borderRadius: 1, 
+                              border: '2px solid',
+                              borderColor: 'primary.main' 
+                            }} />
+                            <Typography variant="caption">Aujourd'hui</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+
                       {selectedDate && (
                         <Alert severity="info" sx={{ mt: 3, borderRadius: 2 }}>
                           <Typography sx={{ fontWeight: 600 }}>
