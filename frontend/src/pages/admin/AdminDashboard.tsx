@@ -51,7 +51,7 @@ const fetchServices = async () => {
   }
   
   try {
-    const response = await axios.get('/api/services', {
+    const response = await axios.get('/api/admin/services-list', {
       headers: {
         Authorization: `Bearer ${token}`,
       },

@@ -96,9 +96,10 @@ function ServicesManagement() {
   } = useQuery({
     queryKey: ['services'],
     queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/services`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/services-list`, {
         headers: {
           'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
         },
       });
       if (!response.ok) {
@@ -414,11 +415,15 @@ function ServicesManagement() {
 
           {/* Sort */}
           <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel>Trier par</InputLabel>
+            <InputLabel id="sort-by-label">Trier par</InputLabel>
             <Select
+              labelId="sort-by-label"
               value={sortBy}
               label="Trier par"
               onChange={(e) => setSortBy(e.target.value as ServiceFilters['sort_by'])}
+              MenuProps={{
+                disableScrollLock: true,
+              }}
             >
               <MenuItem value="name">Nom</MenuItem>
               <MenuItem value="price_dhs">Prix</MenuItem>
@@ -429,11 +434,15 @@ function ServicesManagement() {
 
           {/* Sort Direction */}
           <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Ordre</InputLabel>
+            <InputLabel id="sort-direction-label">Ordre</InputLabel>
             <Select
+              labelId="sort-direction-label"
               value={sortDirection}
               label="Ordre"
               onChange={(e) => setSortDirection(e.target.value as ServiceFilters['sort_direction'])}
+              MenuProps={{
+                disableScrollLock: true,
+              }}
             >
               <MenuItem value="asc">Croissant</MenuItem>
               <MenuItem value="desc">Décroissant</MenuItem>

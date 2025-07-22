@@ -74,9 +74,13 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
   const handleAuthError = (error: Error) => {
     console.warn('Authentication error:', error.message);
     
-    // Clear tokens
+    // Clear all tokens and user data
     localStorage.removeItem('access_token');
     localStorage.removeItem('admin_token');
+    localStorage.removeItem('client_token');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('client_user');
+    localStorage.removeItem('admin_salon'); // Clear salon data
     
     // Redirect to login after a short delay
     setTimeout(() => {

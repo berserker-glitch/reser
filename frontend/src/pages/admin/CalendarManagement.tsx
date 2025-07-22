@@ -62,6 +62,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, getMonth, getYear, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useSalonId } from '../../hooks/useSalonContext';
 import type { Holiday, HolidaySettings } from '../../types';
 
 interface CalendarDay {
@@ -96,6 +97,7 @@ interface DayInfo {
 const CalendarManagement: React.FC = () => {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const salonId = useSalonId();
   
   // State management
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -119,7 +121,7 @@ const CalendarManagement: React.FC = () => {
 
   // Fetch holiday settings
   const { data: settings, isLoading: settingsLoading } = useQuery({
-    queryKey: ['holiday-settings'],
+    queryKey: ['holiday-settings', salonId],
     queryFn: async (): Promise<HolidaySettings> => {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/holidays/settings`, {
         headers: {
@@ -135,9 +137,9 @@ const CalendarManagement: React.FC = () => {
 
   // Fetch reservations for day details
   const { data: reservationsData, isLoading: reservationsLoading, error: reservationsError } = useQuery({
-    queryKey: ['reservations'],
+    queryKey: ['reservations', salonId],
     queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/reservations`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/reservations`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
           'Accept': 'application/json',
@@ -162,16 +164,14 @@ const CalendarManagement: React.FC = () => {
     },
   });
 
-  // Ensure reservations is always an array (handle Laravel pagination)
+  // Ensure reservations is always an array
   const reservations = Array.isArray(reservationsData?.data?.data) ? reservationsData.data.data : 
                       Array.isArray(reservationsData?.data) ? reservationsData.data : 
                       Array.isArray(reservationsData) ? reservationsData : [];
 
-
-
   // Fetch employees for day details
   const { data: employeesData, isLoading: employeesLoading, error: employeesError } = useQuery({
-    queryKey: ['employees'],
+    queryKey: ['employees', salonId],
     queryFn: async () => {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/employees`, {
         headers: {
@@ -206,31 +206,32 @@ const CalendarManagement: React.FC = () => {
   // Fetch holidays for current year and adjacent years (for cross-month selections)
   const currentYear = getYear(currentDate);
   const { data: holidays = [], isLoading: holidaysLoading } = useQuery({
-    queryKey: ['holidays-multi-year', currentYear],
+    queryKey: ['holidays-multi-year', salonId, currentYear],
     queryFn: async (): Promise<Holiday[]> => {
       // Fetch holidays for current year and adjacent years
       const years = [currentYear - 1, currentYear, currentYear + 1];
       const responses = await Promise.all(
-        years.map(year => 
-          fetch(
-            `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/holidays?year=${year}&active=true`,
-            {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
-                'Accept': 'application/json',
-              },
-            }
-          )
-        )
+        years.map(year => {
+          const url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/holidays?year=${year}&active=true`;
+          return fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
+              'Accept': 'application/json',
+            },
+          });
+        })
       );
       
       const allHolidays: Holiday[] = [];
-      for (const response of responses) {
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
         if (response.ok) {
           const data = await response.json();
-          allHolidays.push(...(data.data || []));
+          const yearHolidays = data.data || [];
+          allHolidays.push(...yearHolidays);
         }
       }
+      
       return allHolidays;
     },
   });
@@ -251,7 +252,7 @@ const CalendarManagement: React.FC = () => {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['holiday-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['holiday-settings', salonId] });
       showSnackbar('Paramètres mis à jour avec succès', 'success');
     },
     onError: () => {
@@ -275,7 +276,7 @@ const CalendarManagement: React.FC = () => {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year'] });
+      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year', salonId] });
       showSnackbar(`${data.data.total} jours fériés importés pour ${data.data.year}`, 'success');
     },
     onError: () => {
@@ -331,7 +332,7 @@ const CalendarManagement: React.FC = () => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year'] });
+      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year', salonId] });
       setIsCustomizing(false);
       setSelectedDates([]);
       showSnackbar('Jours fériés personnalisés sauvegardés', 'success');
@@ -379,7 +380,7 @@ const CalendarManagement: React.FC = () => {
       return { added: newDates.length, skipped: dates.length - newDates.length };
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year'] });
+      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year', salonId] });
       setSelectedDates([]);
       showSnackbar(`${result.added} jour(s) férié(s) ajouté(s)${result.skipped > 0 ? `, ${result.skipped} ignoré(s) (déjà fériés)` : ''}`, 'success');
     },
@@ -427,7 +428,7 @@ const CalendarManagement: React.FC = () => {
       return successfulDeletes;
     },
     onSuccess: (removedCount) => {
-      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year'] });
+      queryClient.invalidateQueries({ queryKey: ['holidays-multi-year', salonId] });
       setSelectedDates([]);
       showSnackbar(`${removedCount} jour(s) férié(s) supprimé(s)`, 'success');
     },
@@ -459,8 +460,13 @@ const CalendarManagement: React.FC = () => {
       isCurrentMonth: getMonth(date) === getMonth(currentDate),
       isToday: isToday(date),
       isSelected: selectedDates.includes(format(date, 'yyyy-MM-dd')),
-      isHoliday: filteredHolidays.some(h => h.month === getMonth(date) + 1 && h.day === date.getDate()),
-      holidayName: filteredHolidays.find(h => h.month === getMonth(date) + 1 && h.day === date.getDate())?.name,
+      isHoliday: filteredHolidays.some(h => {
+        // Backend returns date as "2025-01-01T00:00:00.000000Z"
+        // We need to compare just the date part
+        const holidayDate = new Date(h.date);
+        return isSameDay(holidayDate, date);
+      }),
+      holidayName: filteredHolidays.find(h => isSameDay(new Date(h.date), date))?.name,
     }));
   };
 
@@ -515,7 +521,7 @@ const CalendarManagement: React.FC = () => {
 
   const getHolidayForDate = (date: Date | null): Holiday | undefined => {
     if (!date) return undefined;
-    return filteredHolidays.find(h => h.month === getMonth(date) + 1 && h.day === date.getDate());
+    return filteredHolidays.find(h => isSameDay(new Date(h.date), date));
   };
 
   const createDayInfo = (date: Date | null): DayInfo | null => {
@@ -639,16 +645,25 @@ const CalendarManagement: React.FC = () => {
 
   // Filter holidays based on current system type
   const getFilteredHolidays = () => {
-    if (!holidays || holidays.length === 0) return [];
+    if (!holidays || holidays.length === 0) {
+      return [];
+    }
     
-    return holidays.filter(holiday => {
-      if (settings?.holiday_system_type === 'standard') {
-        return holiday.type === 'standard';
-      } else if (settings?.holiday_system_type === 'custom') {
-        return holiday.type === 'custom';
+    const filteredResult = holidays.filter((holiday) => {
+      const systemType = settings?.holiday_system_type;
+      const holidayType = holiday.type;
+      
+      if (systemType === 'standard') {
+        // Backend returns 'NATIONAL' for standard holidays
+        return holidayType === 'NATIONAL';
+      } else if (systemType === 'custom') {
+        // Backend returns 'CUSTOM' for custom holidays
+        return holidayType === 'CUSTOM';
       }
       return true; // Show all if no setting
     });
+    
+    return filteredResult;
   };
 
   const filteredHolidays = getFilteredHolidays();

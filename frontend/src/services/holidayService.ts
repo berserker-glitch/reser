@@ -20,27 +20,55 @@ export interface IslamicHoliday {
 /**
  * Fetch Moroccan national holidays from backend
  */
-export const fetchNationalHolidays = async (): Promise<Holiday[]> => {
+export const fetchNationalHolidays = async (salonId: number, year?: number): Promise<Holiday[]> => {
+  console.log('🇲🇦 fetchNationalHolidays called with:', { salonId, year });
+  
   const token = localStorage.getItem('admin_token') || 
                 localStorage.getItem('access_token') || 
                 localStorage.getItem('token');
+  
+  console.log('🔐 Auth token found:', !!token, token ? token.substring(0, 20) + '...' : 'none');
   
   if (!token) {
     throw new Error('No authentication token found');
   }
   
   try {
-    const response = await axios.get('/api/holidays', {
+    const params = new URLSearchParams({
+      salon_id: salonId.toString()
+    });
+    
+    if (year) {
+      params.append('year', year.toString());
+    }
+    
+    const url = `/api/holidays?${params.toString()}`;
+    console.log('📤 Making request to:', url);
+    
+    const response = await axios.get(url, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
     
-    return response.data.map((holiday: any) => ({
-      id: holiday.id,
+    console.log('📥 Raw API response:', {
+      status: response.status,
+      data: response.data,
+      success: response.data.success
+    });
+    
+    // Handle the new response format with success wrapper
+    const holidays = response.data.success ? response.data.data : response.data;
+    console.log('🎯 Extracted holidays data:', holidays);
+    
+    const mappedHolidays = holidays.map((holiday: any) => ({
+      id: holiday.date || holiday.id,
       name: holiday.name,
-      type: 'national' as const,
+      type: holiday.type === 'NATIONAL' ? 'national' as const : 'islamic' as const,
     }));
+    
+    console.log('✅ fetchNationalHolidays final result:', mappedHolidays);
+    return mappedHolidays;
   } catch (error: any) {
     console.error('Failed to fetch national holidays:', error);
     throw error;
@@ -151,44 +179,22 @@ const getApproximateIslamicHolidays = (year: number): IslamicHoliday[] => {
 };
 
 /**
- * Get all holidays for a specific year (both national and Islamic)
+ * Get all holidays for a specific year (from backend only, filtered by salon_id)
  */
-export const getAllHolidays = async (year: number): Promise<Holiday[]> => {
+export const getAllHolidays = async (salonId: number, year: number): Promise<Holiday[]> => {
   try {
-    const [nationalHolidays, islamicHolidays] = await Promise.all([
-      fetchNationalHolidays(),
-      fetchIslamicHolidays(year)
-    ]);
+    console.log('🎄 getAllHolidays called with:', { salonId, year });
     
-    // Convert Islamic holidays to Holiday format
-    const islamicHolidaysFormatted: Holiday[] = islamicHolidays.map(holiday => ({
-      id: holiday.date,
-      name: holiday.name,
-      type: 'islamic' as const,
-      description: holiday.hijriDate ? `التاريخ الهجري: ${holiday.hijriDate}` : undefined,
-    }));
+    // Only use backend holidays which are properly filtered by salon_id
+    const nationalHolidays = await fetchNationalHolidays(salonId, year);
     
-    // Combine and deduplicate holidays
-    const allHolidays = [...nationalHolidays, ...islamicHolidaysFormatted];
-    const uniqueHolidays = allHolidays.reduce((acc, holiday) => {
-      const existingIndex = acc.findIndex(h => h.id === holiday.id);
-      if (existingIndex === -1) {
-        acc.push(holiday);
-      } else {
-        // If we have both national and Islamic holiday on same date, combine them
-        acc[existingIndex] = {
-          ...acc[existingIndex],
-          name: `${acc[existingIndex].name} / ${holiday.name}`,
-          description: [acc[existingIndex].description, holiday.description]
-            .filter(Boolean).join(' | '),
-        };
-      }
-      return acc;
-    }, [] as Holiday[]);
+    console.log('🇲🇦 Backend holidays received (filtered by salon):', nationalHolidays);
     
-    return uniqueHolidays;
+    // Return only the salon-specific holidays from backend
+    console.log('✅ Final getAllHolidays result (salon filtered):', nationalHolidays);
+    return nationalHolidays;
   } catch (error) {
-    console.error('Failed to fetch all holidays:', error);
+    console.error('Failed to fetch holidays:', error);
     throw error;
   }
 }; 

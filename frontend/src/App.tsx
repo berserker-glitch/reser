@@ -13,7 +13,6 @@ import {
   CalendarManagement,
   Reports,
   Settings,
-  SalonSignup
 } from './pages/admin';
 import {
   ClientLogin,
@@ -84,7 +83,6 @@ function AppWithErrorHandling() {
               <Route path="calendar" element={<CalendarManagement />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="salon-signup" element={<SalonSignup />} />
             </Route>
             
             {/* Client dashboard routes */}

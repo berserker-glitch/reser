@@ -68,6 +68,10 @@ function AdminLayout() {
   const [showResetSnackbar, setShowResetSnackbar] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   
+  // Get user data from localStorage
+  const adminUser = localStorage.getItem('admin_user');
+  const user = adminUser ? JSON.parse(adminUser) : null;
+  
   // Navigation store
   const { navigationItems, reorderNavigation, resetNavigation } = useNavigationStore();
   
@@ -113,6 +117,8 @@ function AdminLayout() {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('access_token');
     localStorage.removeItem('token');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_salon'); // Clear salon data
     navigate('/login');
     handleUserMenuClose();
   };
@@ -435,7 +441,7 @@ function AdminLayout() {
                 onClick={handleUserMenuOpen}
                 startIcon={
                   <Avatar sx={{ width: 32, height: 32 }}>
-                    AM
+                    {user?.full_name?.charAt(0)?.toUpperCase() || 'A'}
                   </Avatar>
                 }
                 endIcon={!isMobile ? <ExpandMore /> : null}
@@ -448,10 +454,10 @@ function AdminLayout() {
                 {!isMobile && (
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      Alex Morales
+                      {user?.full_name || 'Admin User'}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Directeur
+                      Propriétaire
                     </Typography>
                   </Box>
                 )}

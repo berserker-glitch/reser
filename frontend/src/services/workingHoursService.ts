@@ -54,7 +54,7 @@ export const getAllWorkingHours = async (): Promise<WorkingHoursGroup[]> => {
       throw new Error('No authentication token found');
     }
 
-    const response = await axios.get('/api/working-hours', {
+    const response = await axios.get('/api/admin/working-hours-list', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

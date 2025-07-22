@@ -7,7 +7,6 @@ import {
   CalendarTodayOutlined,
   RefreshOutlined,
   SettingsOutlined,
-  BusinessOutlined,
 } from '@mui/icons-material';
 import React from 'react';
 
@@ -26,7 +25,6 @@ export const iconMap = {
   CalendarTodayOutlined,
   RefreshOutlined,
   SettingsOutlined,
-  BusinessOutlined,
 };
 
 // Helper function to get React element from icon name
@@ -80,12 +78,6 @@ export const defaultNavigationItems: NavItem[] = [
     path: '/admin/settings', 
     label: 'Paramètres' 
   },
-  { 
-    id: 'salon-signup', 
-    iconName: 'BusinessOutlined', 
-    path: '/admin/salon-signup', 
-    label: 'Créer Salon' 
-  },
 ];
 
 interface NavigationStore {
@@ -112,16 +104,16 @@ export const useNavigationStore = create<NavigationStore>()(
         set({ navigationItems: defaultNavigationItems });
       },
     }),
-    {
+        {
       name: 'navigation-storage',
       // Add version to force cache invalidation when structure changes
-      version: 2,
-              migrate: (persistedState: any, version: number) => {
-          // If version mismatch or invalid structure, reset to defaults
-          if (version !== 2 || !persistedState?.navigationItems) {
-          console.log('Resetting navigation storage due to version/structure mismatch');
-          return { navigationItems: defaultNavigationItems };
-        }
+      version: 3,
+      migrate: (persistedState: any, version: number) => {
+        // If version mismatch or invalid structure, reset to defaults
+        if (version !== 3 || !persistedState?.navigationItems) {
+        console.log('Resetting navigation storage due to version/structure mismatch');
+        return { navigationItems: defaultNavigationItems };
+      }
         
         // Validate that all items have iconName instead of icon
         const items = persistedState.navigationItems;

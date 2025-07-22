@@ -71,6 +71,7 @@ import {
 import { fr } from 'date-fns/locale';
 import axios from 'axios';
 import { getCalendarAroundDate } from '../../services/calendarService';
+import { useSalonId } from '../../hooks/useSalonContext';
 import type { CalendarDay } from '../../services/calendarService';
 
 // Types
@@ -85,8 +86,7 @@ interface Service {
 interface Employee {
   id: number;
   full_name: string;
-  note?: string;
-  profile_picture?: string;
+  phone?: string;
 }
 
 interface BookingData {
@@ -96,13 +96,21 @@ interface BookingData {
 }
 
 // API functions
-const fetchServices = async () => {
-  const response = await axios.get('http://127.0.0.1:8000/api/services');
+const fetchServices = async (salonId: number) => {
+  const params = new URLSearchParams({
+    salon_id: salonId.toString()
+  });
+  
+  const response = await axios.get(`http://127.0.0.1:8000/api/services?${params.toString()}`);
   return response.data;
 };
 
-const fetchEmployees = async () => {
-  const response = await axios.get('http://127.0.0.1:8000/api/employees');
+const fetchEmployees = async (salonId: number) => {
+  const params = new URLSearchParams({
+    salon_id: salonId.toString()
+  });
+  
+  const response = await axios.get(`http://127.0.0.1:8000/api/employees?${params.toString()}`);
   return response.data;
 };
 
@@ -158,16 +166,18 @@ const BookingFlow: React.FC = () => {
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [calendarAvailability, setCalendarAvailability] = useState<Map<string, CalendarDay>>(new Map());
 
+  const salonId = useSalonId();
+
   // Fetch services
   const { data: services, isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'],
-    queryFn: fetchServices,
+    queryKey: ['services', salonId],
+    queryFn: () => fetchServices(salonId),
   });
 
   // Fetch employees
   const { data: employeesData, isLoading: employeesLoading } = useQuery({
-    queryKey: ['employees'],
-    queryFn: fetchEmployees,
+    queryKey: ['employees', salonId],
+    queryFn: () => fetchEmployees(salonId),
     enabled: bookingData.serviceId !== null,
   });
 
@@ -184,8 +194,8 @@ const BookingFlow: React.FC = () => {
 
   // Fetch calendar availability for booking restrictions
   const { data: calendarData, isLoading: calendarLoading } = useQuery({
-    queryKey: ['calendar-availability', format(calendarDate, 'yyyy-MM-dd')],
-    queryFn: () => getCalendarAroundDate(format(calendarDate, 'yyyy-MM-dd'), 15, 45),
+    queryKey: ['calendar-availability', salonId, format(calendarDate, 'yyyy-MM-dd')],
+    queryFn: () => getCalendarAroundDate(salonId, format(calendarDate, 'yyyy-MM-dd'), 15, 45),
     enabled: activeStep === 2,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

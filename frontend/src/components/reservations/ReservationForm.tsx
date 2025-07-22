@@ -100,7 +100,7 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
   const { data: servicesData, isLoading: servicesLoading } = useQuery({
     queryKey: ['services'],
     queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/services`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/services-list`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
           'Accept': 'application/json',

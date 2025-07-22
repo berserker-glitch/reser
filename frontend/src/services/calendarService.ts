@@ -39,22 +39,26 @@ export interface CalendarAvailabilityResponse {
 /**
  * Fetch calendar availability for a date range
  * 
+ * @param salonId - Salon ID for salon isolation
  * @param startDate - Start date in YYYY-MM-DD format
  * @param endDate - End date in YYYY-MM-DD format
  * @returns Promise<CalendarAvailabilityResponse>
  */
 export const getCalendarAvailability = async (
+  salonId: number,
   startDate: string,
   endDate: string
 ): Promise<CalendarAvailabilityResponse> => {
   try {
     console.debug('CalendarService: Fetching calendar availability', {
+      salonId,
       startDate,
       endDate
     });
 
     const response = await axios.get(`${API_BASE_URL}/calendar-availability`, {
       params: {
+        salon_id: salonId,
         start_date: startDate,
         end_date: endDate
       },
@@ -62,6 +66,7 @@ export const getCalendarAvailability = async (
     });
 
     console.debug('CalendarService: Calendar availability fetched successfully', {
+      salonId,
       startDate,
       endDate,
       totalDays: response.data.data?.length || 0,
@@ -71,6 +76,7 @@ export const getCalendarAvailability = async (
     return response.data;
   } catch (error: any) {
     console.error('CalendarService: Failed to fetch calendar availability', {
+      salonId,
       startDate,
       endDate,
       error: error.message,
@@ -110,31 +116,27 @@ export const getMonthAvailability = async (
     endDate: endDateStr
   });
 
-  return getCalendarAvailability(startDateStr, endDateStr);
+  return getCalendarAvailability(1, startDateStr, endDateStr); // Assuming salonId is 1 for now
 };
 
 /**
  * Check if a specific date is bookable
+ * Simple wrapper around getCalendarAvailability for single date checks
  * 
- * @param dateStr - Date in YYYY-MM-DD format
+ * @param salonId - Salon ID for salon isolation
+ * @param dateStr - Date string in YYYY-MM-DD format
  * @returns Promise<boolean>
  */
-export const isDateBookable = async (dateStr: string): Promise<boolean> => {
+export const isDateBookable = async (salonId: number, dateStr: string): Promise<boolean> => {
   try {
-    const response = await getCalendarAvailability(dateStr, dateStr);
+    const response = await getCalendarAvailability(salonId, dateStr, dateStr);
     const dayData = response.data[0];
     
-    console.debug('CalendarService: Date bookability check', {
-      date: dateStr,
-      isBookable: dayData?.is_bookable || false,
-      isWorkingDay: dayData?.is_working_day || false,
-      isHoliday: dayData?.is_holiday || false
-    });
-
-    return dayData?.is_bookable || false;
+    return dayData ? dayData.is_bookable : false;
   } catch (error) {
-    console.error('CalendarService: Failed to check date bookability', {
-      date: dateStr,
+    console.error('CalendarService: Failed to check if date is bookable', {
+      salonId,
+      dateStr,
       error
     });
     return false;
@@ -145,12 +147,14 @@ export const isDateBookable = async (dateStr: string): Promise<boolean> => {
  * Get calendar data for a date range around a specific date
  * Useful for calendar components that need context around a selected date
  * 
+ * @param salonId - Salon ID for salon isolation
  * @param centerDate - Center date in YYYY-MM-DD format
  * @param daysBefore - Number of days before center date to include
  * @param daysAfter - Number of days after center date to include
  * @returns Promise<CalendarAvailabilityResponse>
  */
 export const getCalendarAroundDate = async (
+  salonId: number,
   centerDate: string,
   daysBefore: number = 15,
   daysAfter: number = 45
@@ -167,6 +171,7 @@ export const getCalendarAroundDate = async (
   const endDateStr = endDate.toISOString().split('T')[0];
 
   console.debug('CalendarService: Fetching calendar around date', {
+    salonId,
     centerDate,
     daysBefore,
     daysAfter,
@@ -174,7 +179,7 @@ export const getCalendarAroundDate = async (
     endDate: endDateStr
   });
 
-  return getCalendarAvailability(startDateStr, endDateStr);
+  return getCalendarAvailability(salonId, startDateStr, endDateStr);
 };
 
 export default {

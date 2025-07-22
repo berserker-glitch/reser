@@ -19,6 +19,8 @@ import {
   Divider,
   Alert,
   CircularProgress,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import {
   ChevronLeft,
@@ -32,6 +34,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday
 import { fr } from 'date-fns/locale';
 import { getAllHolidays, type Holiday } from '../../services/holidayService';
 import { getAllWorkingHours, isWorkingDay, getEmployeesWorkingOnDay } from '../../services/workingHoursService';
+import { useSalonId } from '../../hooks/useSalonContext';
 
 // Types
 interface DayInfo {
@@ -66,9 +69,11 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
   onDateClick,
   compact = false
 }) => {
+  const theme = useTheme(); // Add theme hook for holiday styling
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<DayInfo | null>(null);
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
+  const salonId = useSalonId();
 
   // Fetch holidays for current year
   const { 
@@ -76,8 +81,13 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
     isLoading: holidaysLoading,
     error: holidaysError 
   } = useQuery({
-    queryKey: ['holidays', currentDate.getFullYear()],
-    queryFn: () => getAllHolidays(currentDate.getFullYear()),
+    queryKey: ['holidays', salonId, currentDate.getFullYear()],
+    queryFn: async () => {
+      console.log('🔍 EnhancedCalendar: Fetching holidays for', { salonId, year: currentDate.getFullYear() });
+      const result = await getAllHolidays(salonId, currentDate.getFullYear());
+      console.log('📅 EnhancedCalendar: Holidays received:', result);
+      return result;
+    },
     staleTime: 1000 * 60 * 60 * 24, // 24 hours
     gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days (previously cacheTime)
   });
@@ -159,7 +169,27 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
     if (!date) return undefined;
     
     const dateStr = format(date, 'yyyy-MM-dd');
-    return (holidays as Holiday[]).find(h => h.id === dateStr);
+    const foundHoliday = (holidays as Holiday[]).find(h => {
+      // Handle both date formats: "2025-01-01" and "2025-01-01T00:00:00.000000Z"
+      const holidayDateStr = h.id.includes('T') ? h.id.split('T')[0] : h.id;
+      return holidayDateStr === dateStr;
+    });
+    
+    // Debug logging for January 1st specifically
+    if (dateStr === '2025-01-01') {
+      console.log('🔍 Checking holiday for Jan 1st:', {
+        dateStr,
+        availableHolidays: holidays,
+        foundHoliday,
+        holidaysArray: (holidays as Holiday[]).map(h => ({ 
+          id: h.id, 
+          name: h.name, 
+          parsedDate: h.id.includes('T') ? h.id.split('T')[0] : h.id 
+        }))
+      });
+    }
+    
+    return foundHoliday;
   };
 
   // Create day info object
@@ -351,30 +381,26 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '0.75rem',
-                    bgcolor: dayInfo.isToday 
-                      ? 'primary.main' 
-                      : isHoliday 
-                        ? 'error.light' 
-                        : dayInfo.isNonWorkingDay 
-                          ? 'grey.100' 
+                    bgcolor: dayInfo.isToday
+                        ? 'primary.main'
+                        : isHoliday
+                          ? alpha(theme.palette.error.main, 0.1) // Holiday background in light red
                           : 'transparent',
-                    color: dayInfo.isToday 
-                      ? 'white' 
-                      : isHoliday 
-                        ? 'white' 
-                        : dayInfo.isNonWorkingDay 
-                          ? 'text.secondary' 
-                          : 'text.primary',
+                    color: dayInfo.isToday
+                          ? 'primary.contrastText' 
+                          : isHoliday
+                            ? 'error.main' // Holiday text in red
+                            : 'text.primary',
                     borderRadius: dayInfo.isToday ? '50%' : isHoliday ? 1 : 0,
                     position: 'relative',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      bgcolor: dayInfo.isToday 
-                        ? 'primary.dark' 
-                        : isHoliday 
-                          ? 'error.dark' 
-                          : 'grey.200',
+                      bgcolor: dayInfo.isToday
+                        ? 'primary.main'
+                        : isHoliday
+                          ? alpha(theme.palette.error.main, 0.1) // Holiday background in light red
+                          : 'transparent',
                       transform: 'scale(1.1)',
                     },
                   }}

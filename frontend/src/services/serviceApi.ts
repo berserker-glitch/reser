@@ -33,10 +33,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear all possible tokens
+      // Clear all possible tokens and user data
       localStorage.removeItem('client_token');
       localStorage.removeItem('access_token');
       localStorage.removeItem('admin_token');
+      localStorage.removeItem('client_user');
+      localStorage.removeItem('admin_user');
+      localStorage.removeItem('admin_salon'); // Clear salon data
       // Redirect to appropriate login page
       const isClientPath = window.location.pathname.includes('/client');
       window.location.href = isClientPath ? '/client/login' : '/login';
@@ -98,7 +101,7 @@ export const serviceApi = {
       params.append('sort_direction', filters.sort_direction);
     }
 
-    const response = await api.get(`/services?${params.toString()}`);
+    const response = await api.get(`/admin/services-list?${params.toString()}`);
     return response.data;
   },
 
@@ -108,7 +111,7 @@ export const serviceApi = {
    * @returns Promise<Service>
    */
   async getService(id: number): Promise<Service> {
-    const response = await api.get(`/services/${id}`);
+    const response = await api.get(`/admin/services/${id}`);
     return response.data;
   },
 
@@ -147,7 +150,7 @@ export const serviceApi = {
    * @returns Promise<Service[]>
    */
   async getServicesWithEmployees(): Promise<Service[]> {
-    const response = await api.get('/services/with-employees');
+    const response = await api.get('/admin/services/with-employees');
     return response.data;
   },
 
@@ -156,7 +159,7 @@ export const serviceApi = {
    * @returns Promise<ServiceStatistics>
    */
   async getServiceStatistics(): Promise<ServiceStatistics> {
-    const response = await api.get('/services/statistics');
+    const response = await api.get('/admin/services/statistics');
     return response.data;
   },
 
@@ -230,7 +233,7 @@ export const serviceApi = {
    * @returns Promise<Service[]>
    */
   async getPopularServices(): Promise<Service[]> {
-    const response = await api.get('/services/popular');
+    const response = await api.get('/admin/services/popular');
     return response.data;
   },
 
