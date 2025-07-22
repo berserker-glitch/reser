@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\API\BaseController;
 use App\Models\Reservation;
 use App\Models\Service;
 use App\Services\AvailabilityService;
@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
-class ReservationController extends Controller
+class ReservationController extends BaseController
 {
     private AvailabilityService $availabilityService;
     
@@ -44,7 +44,16 @@ class ReservationController extends Controller
             // Clients can only see their own reservations
             $query->where('client_id', $user->id);
         } elseif ($user->role === 'OWNER') {
-            // Owners can see all reservations with optional filters
+            // Get salon context and validate access for owners
+            [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+            if ($errorResponse) {
+                return $errorResponse;
+            }
+            
+            // Owners can only see reservations for their salon
+            $query->where('salon_id', $salonId);
+            
+            // Apply additional owner filters
             if ($request->has('client_id')) {
                 $query->where('client_id', $request->client_id);
             }

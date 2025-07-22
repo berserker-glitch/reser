@@ -15,6 +15,7 @@ class Reservation extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'salon_id',
         'client_id',
         'employee_id',
         'service_id',
@@ -45,6 +46,14 @@ class Reservation extends Model
     const STATUS_CONFIRMED = 'CONFIRMED';
     const STATUS_CANCELLED = 'CANCELLED';
     const STATUS_COMPLETED = 'COMPLETED';
+
+    /**
+     * Get the salon that owns the reservation.
+     */
+    public function salon()
+    {
+        return $this->belongsTo(Salon::class);
+    }
 
     /**
      * Get the client that owns the reservation.

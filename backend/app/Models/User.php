@@ -67,6 +67,14 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
+     * Get the salon owned by the user (for owners).
+     */
+    public function salon()
+    {
+        return $this->hasOne(Salon::class, 'owner_id');
+    }
+
+    /**
      * Get the employee records associated with the user (owner).
      */
     public function employees()

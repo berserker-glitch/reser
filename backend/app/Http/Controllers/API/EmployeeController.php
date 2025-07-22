@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\API\BaseController;
 use App\Models\Employee;
 use App\Models\Service;
 use App\Rules\ValidProfilePicture;
@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
-class EmployeeController extends Controller
+class EmployeeController extends BaseController
 {
     /**
      * Display a listing of employees with their services
@@ -30,7 +30,14 @@ class EmployeeController extends Controller
         ]);
 
         try {
-            $query = Employee::with(['services', 'user']);
+            // Get salon context and validate access
+            [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+            if ($errorResponse) {
+                return $errorResponse;
+            }
+
+            $query = Employee::with(['services', 'user'])
+                ->where('salon_id', $salonId);
             
             // Apply filters
             if ($request->has('service_id')) {

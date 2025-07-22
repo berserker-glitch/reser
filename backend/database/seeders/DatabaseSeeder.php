@@ -15,10 +15,12 @@ class DatabaseSeeder extends Seeder
 
         // Run seeders in proper order (dependencies first)
         $this->call([
-            UserSeeder::class,
-            ServiceSeeder::class,
-            EmployeeSeeder::class,
-            WorkingHourSeeder::class,
+            UserSeeder::class,      // Create users (including owners)
+            SalonSeeder::class,     // Create salons for owners
+            ServiceSeeder::class,   // Create services for salons
+            EmployeeSeeder::class,  // Create employees for salons
+            WorkingHourSeeder::class, // Create working hours for salons
+            ReservationSeeder::class, // Create sample reservations
         ]);
 
         echo "\n✅ Database seeding completed successfully!\n";

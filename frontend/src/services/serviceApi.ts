@@ -14,7 +14,10 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token') || localStorage.getItem('admin_token');
+    // Check for client token first, then admin tokens
+    const token = localStorage.getItem('client_token') || 
+                  localStorage.getItem('access_token') || 
+                  localStorage.getItem('admin_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,9 +33,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear all possible tokens
+      localStorage.removeItem('client_token');
       localStorage.removeItem('access_token');
       localStorage.removeItem('admin_token');
-      window.location.href = '/login';
+      // Redirect to appropriate login page
+      const isClientPath = window.location.pathname.includes('/client');
+      window.location.href = isClientPath ? '/client/login' : '/login';
     }
     return Promise.reject(error);
   }

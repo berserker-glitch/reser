@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Client Authentication Debug Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .debug-section {
+            padding: 25px;
+            border-bottom: 1px solid #eee;
+        }
+        .debug-section:last-child {
+            border-bottom: none;
+        }
+        .section-title {
+            color: #333;
+            font-size: 1.4em;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+        input[type="email"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .token-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Client Authentication Debug</h1>
+            <p>Salon Reservation System - Authentication Troubleshooter</p>
+        </div>
+
+        <!-- Token Status Section -->
+        <div class="debug-section">
+            <div class="section-title">
+                🎫 Token Status
+            </div>
+            <div id="tokenStatus">Loading...</div>
+            <button onclick="checkTokens()">🔄 Refresh Token Status</button>
+            <button onclick="clearAllTokens()">🗑️ Clear All Tokens</button>
+        </div>
+
+        <!-- Quick Login Section -->
+        <div class="debug-section">
+            <div class="section-title">
+                🚪 Quick Client Login
+            </div>
+            <div class="grid">
+                <div>
+                    <input type="email" id="email" placeholder="Client Email" value="test@client.com">
+                    <input type="password" id="password" placeholder="Password" value="password123">
+                </div>
+                <div>
+                    <button onclick="testLogin()">🔑 Test Login</button>
+                    <button onclick="testRegister()">📝 Register Test Client</button>
+                    <button onclick="logout()">🚪 Logout</button>
+                </div>
+            </div>
+            <div id="loginStatus"></div>
+        </div>
+
+        <!-- API Tests Section -->
+        <div class="debug-section">
+            <div class="section-title">
+                🌐 API Authentication Tests
+            </div>
+            <div class="grid">
+                <button onclick="testAuthMe()">👤 Test /auth/me</button>
+                <button onclick="testReservations()">📅 Test /reservations</button>
+                <button onclick="testServices()">💄 Test /services</button>
+                <button onclick="testCalendarAvailability()">📆 Test /calendar-availability</button>
+            </div>
+            <div id="apiTestResults"></div>
+        </div>
+
+        <!-- Instructions Section -->
+        <div class="debug-section">
+            <div class="section-title">
+                📋 Quick Fix Instructions
+            </div>
+            <div class="info">
+                <strong>If you see "No valid client token found":</strong>
+                <ol>
+                    <li>Click "Register Test Client" to create a test account</li>
+                    <li>Then click "Test Login" to get a fresh token</li>
+                    <li>Try using your salon app again</li>
+                </ol>
+            </div>
+            <div class="warning">
+                <strong>If you see "Token expired" errors:</strong>
+                <ol>
+                    <li>Click "Clear All Tokens"</li>
+                    <li>Login again with your credentials</li>
+                    <li>JWT tokens expire after 1 hour for security</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:8000/api';
+
+        // Check what tokens are stored
+        function checkTokens() {
+            const clientToken = localStorage.getItem('client_token');
+            const adminToken = localStorage.getItem('admin_token');
+            const authToken = localStorage.getItem('auth_token');
+            const userToken = localStorage.getItem('user_token');
+            
+            let html = '';
+            
+            if (clientToken) {
+                html += `<div class="success">✅ Client Token Found: ${clientToken.substring(0, 50)}...</div>`;
+                try {
+                    const payload = JSON.parse(atob(clientToken.split('.')[1]));
+                    const exp = new Date(payload.exp * 1000);
+                    const isExpired = exp < new Date();
+                    html += `<div class="info">🕒 Expires: ${exp.toLocaleString()} ${isExpired ? '(EXPIRED)' : '(Valid)'}</div>`;
+                } catch (e) {
+                    html += `<div class="error">❌ Invalid token format</div>`;
+                }
+            } else {
+                html += `<div class="error">❌ No client_token found in localStorage</div>`;
+            }
+            
+            if (adminToken) {
+                html += `<div class="warning">⚠️ Admin Token Found (this might interfere): ${adminToken.substring(0, 30)}...</div>`;
+            }
+            
+            if (authToken || userToken) {
+                html += `<div class="warning">⚠️ Other tokens found: auth_token=${!!authToken}, user_token=${!!userToken}</div>`;
+            }
+            
+            if (!clientToken && !adminToken && !authToken && !userToken) {
+                html += `<div class="error">❌ No authentication tokens found</div>`;
+            }
+            
+            document.getElementById('tokenStatus').innerHTML = html;
+        }
+
+        // Clear all tokens
+        function clearAllTokens() {
+            localStorage.removeItem('client_token');
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_token');
+            document.getElementById('tokenStatus').innerHTML = '<div class="success">✅ All tokens cleared</div>';
+            setTimeout(checkTokens, 1000);
+        }
+
+        // Test registration
+        async function testRegister() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            document.getElementById('loginStatus').innerHTML = '<div class="info">📝 Registering test client...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        full_name: 'Test Client',
+                        email: email,
+                        phone: '0612345678',
+                        password: password,
+                        password_confirmation: password,
+                        role: 'CLIENT'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('client_token', data.token);
+                    document.getElementById('loginStatus').innerHTML = '<div class="success">✅ Registration successful! Token saved.</div>';
+                    checkTokens();
+                } else {
+                    document.getElementById('loginStatus').innerHTML = `<div class="error">❌ Registration failed: ${data.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('loginStatus').innerHTML = `<div class="error">❌ Network error: ${error.message}</div>`;
+            }
+        }
+
+        // Test login
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            document.getElementById('loginStatus').innerHTML = '<div class="info">🔑 Logging in...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('client_token', data.token);
+                    document.getElementById('loginStatus').innerHTML = '<div class="success">✅ Login successful! Token saved.</div>';
+                    checkTokens();
+                } else {
+                    document.getElementById('loginStatus').innerHTML = `<div class="error">❌ Login failed: ${data.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('loginStatus').innerHTML = `<div class="error">❌ Network error: ${error.message}</div>`;
+            }
+        }
+
+        // Logout
+        function logout() {
+            clearAllTokens();
+            document.getElementById('loginStatus').innerHTML = '<div class="success">✅ Logged out - all tokens cleared</div>';
+        }
+
+        // Test authenticated endpoints
+        async function testAuthMe() {
+            await testEndpoint('/auth/me', 'GET');
+        }
+
+        async function testReservations() {
+            await testEndpoint('/reservations', 'GET');
+        }
+
+        async function testServices() {
+            await testEndpoint('/services', 'GET');
+        }
+
+        async function testCalendarAvailability() {
+            await testEndpoint('/calendar-availability?start_date=2025-07-21&end_date=2025-07-28', 'GET');
+        }
+
+        async function testEndpoint(endpoint, method = 'GET') {
+            const token = localStorage.getItem('client_token');
+            const resultDiv = document.getElementById('apiTestResults');
+            
+            resultDiv.innerHTML = `<div class="info">🔄 Testing ${endpoint}...</div>`;
+            
+            try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: method,
+                    headers: headers
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">✅ ${endpoint} - Success (${response.status})</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ ${endpoint} - Failed (${response.status}): ${data.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ ${endpoint} - Network error: ${error.message}</div>`;
+            }
+        }
+
+        // Load initial status
+        document.addEventListener('DOMContentLoaded', function() {
+            checkTokens();
+        });
+    </script>
+</body>
+</html> 

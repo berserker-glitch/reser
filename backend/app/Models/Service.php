@@ -15,6 +15,7 @@ class Service extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'salon_id',
         'name',
         'description',
         'duration_min',
@@ -30,6 +31,14 @@ class Service extends Model
         'duration_min' => 'integer',
         'price_dhs' => 'decimal:2',
     ];
+
+    /**
+     * Get the salon that owns the service.
+     */
+    public function salon()
+    {
+        return $this->belongsTo(Salon::class);
+    }
 
     /**
      * The employees that belong to the service.

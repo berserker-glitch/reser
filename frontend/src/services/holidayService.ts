@@ -23,33 +23,18 @@ export interface IslamicHoliday {
 export const fetchNationalHolidays = async (): Promise<Holiday[]> => {
   const token = localStorage.getItem('admin_token') || 
                 localStorage.getItem('access_token') || 
-                localStorage.getItem('client_token') ||
                 localStorage.getItem('token');
   
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+  
   try {
-    let response;
-    
-    // Try authenticated request first if token exists
-    if (token) {
-      try {
-        response = await axios.get('/api/holidays', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      } catch (authError: any) {
-        // If authentication fails, fall back to public endpoint
-        if (authError.response?.status === 401) {
-          console.log('Auth failed, falling back to public holidays endpoint');
-          response = await axios.get('/api/public/holidays');
-        } else {
-          throw authError;
-        }
-      }
-    } else {
-      // No token, use public endpoint directly
-      response = await axios.get('/api/public/holidays');
-    }
+    const response = await axios.get('/api/holidays', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     
     return response.data.map((holiday: any) => ({
       id: holiday.id,

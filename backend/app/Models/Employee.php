@@ -15,12 +15,21 @@ class Employee extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'salon_id',
         'user_id',
         'full_name',
         'phone',
         'profile_picture',
         'note',
     ];
+
+    /**
+     * Get the salon that owns the employee.
+     */
+    public function salon()
+    {
+        return $this->belongsTo(Salon::class);
+    }
 
     /**
      * Get the user that owns the employee.

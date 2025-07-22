@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Salon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -38,7 +39,13 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:120|unique:users',
             'password' => 'required|string|min:8|confirmed',
             'phone' => 'nullable|string|max:40',
-            'role' => 'nullable|in:OWNER,CLIENT'
+            'role' => 'nullable|in:OWNER,CLIENT',
+            // Salon fields (required only for OWNER registration)
+            'salon_name' => 'required_if:role,OWNER|string|max:120',
+            'salon_description' => 'nullable|string',
+            'salon_address' => 'nullable|string',
+            'salon_phone' => 'nullable|string|max:40',
+            'salon_email' => 'nullable|string|email|max:120',
         ]);
 
         if ($validator->fails()) {
@@ -55,6 +62,7 @@ class AuthController extends Controller
         }
 
         try {
+            // Create user
             $user = User::create([
                 'full_name' => $request->full_name,
                 'email' => $request->email,
@@ -63,15 +71,36 @@ class AuthController extends Controller
                 'role' => $request->role ?? 'CLIENT'
             ]);
 
+            $salon = null;
+            
+            // Create salon if user is an OWNER
+            if ($user->role === 'OWNER') {
+                $salon = Salon::create([
+                    'name' => $request->salon_name,
+                    'description' => $request->salon_description,
+                    'owner_id' => $user->id,
+                    'address' => $request->salon_address,
+                    'phone' => $request->salon_phone,
+                    'email' => $request->salon_email,
+                ]);
+
+                Log::info('Salon created for owner', [
+                    'salon_id' => $salon->id,
+                    'salon_name' => $salon->name,
+                    'owner_id' => $user->id,
+                ]);
+            }
+
             $token = JWTAuth::fromUser($user);
 
             Log::info('User registered successfully', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'role' => $user->role
+                'role' => $user->role,
+                'salon_id' => $salon ? $salon->id : null
             ]);
 
-            return response()->json([
+            $response = [
                 'success' => true,
                 'message' => 'User registered successfully',
                 'user' => $user,
@@ -80,7 +109,14 @@ class AuthController extends Controller
                     'type' => 'bearer',
                     'expires_in' => auth()->factory()->getTTL() * 60
                 ]
-            ], 201);
+            ];
+
+            // Add salon information for owners
+            if ($salon) {
+                $response['salon'] = $salon;
+            }
+
+            return response()->json($response, 201);
 
         } catch (\Exception $e) {
             Log::error('User registration failed', [
@@ -489,14 +525,22 @@ class AuthController extends Controller
      */
     protected function respondWithToken($token)
     {
-        return response()->json([
+        $user = auth()->user();
+        $response = [
             'success' => true,
-            'user' => auth()->user(),
+            'user' => $user,
             'authorization' => [
                 'token' => $token,
                 'type' => 'bearer',
                 'expires_in' => auth()->factory()->getTTL() * 60
             ]
-        ]);
+        ];
+
+        // Add salon information for owners
+        if ($user->role === 'OWNER' && $user->salon) {
+            $response['salon'] = $user->salon;
+        }
+
+        return response()->json($response);
     }
 } 

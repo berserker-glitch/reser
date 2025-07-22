@@ -13,14 +13,22 @@ return new class extends Migration
     {
         Schema::create('employees', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->unsignedBigInteger('salon_id');
+            $table->unsignedBigInteger('user_id');
             $table->string('full_name', 120);
             $table->string('phone', 40)->nullable();
+            $table->string('profile_picture')->nullable();
             $table->text('note')->nullable();
             $table->timestamps();
+
+            // Foreign key constraints
+            $table->foreign('salon_id')->references('id')->on('salons')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             
-            // Index for performance
-            $table->index('user_id', 'idx_user_id');
+            // Indexes for performance
+            $table->index('salon_id');
+            $table->index('user_id');
+            $table->index('full_name');
         });
     }
 
@@ -31,4 +39,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('employees');
     }
-};
+}; 

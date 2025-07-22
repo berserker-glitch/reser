@@ -11,35 +11,15 @@ class Holiday extends Model
     use HasFactory;
 
     /**
-     * Disable timestamps since we don't have created_at/updated_at columns
-     */
-    public $timestamps = false;
-
-    /**
-     * Disable auto-incrementing since we use composite primary key
-     */
-    public $incrementing = false;
-
-    /**
-     * Set the primary key to be composite
-     */
-    protected $primaryKey = ['type', 'month', 'day'];
-
-    /**
-     * The primary key is not a single column
-     */
-    protected $keyType = 'array';
-
-    /**
      * The attributes that are mass assignable.
      *
      * @var array<string>
      */
     protected $fillable = [
-        'type',
+        'salon_id',
+        'date',
         'name',
-        'month',
-        'day',
+        'type',
     ];
 
     /**
@@ -48,156 +28,65 @@ class Holiday extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'month' => 'integer',
-        'day' => 'integer',
+        'date' => 'date',
     ];
 
     /**
      * Holiday types
      */
-    const TYPE_STANDARD = 'standard';
-    const TYPE_CUSTOM = 'custom';
+    const TYPE_NATIONAL = 'NATIONAL';
+    const TYPE_CUSTOM = 'CUSTOM';
 
     /**
-     * Get all holidays (no is_active filter needed)
+     * Get the salon that owns the holiday.
      */
-    public static function active()
+    public function salon()
     {
-        return static::query();
+        return $this->belongsTo(Salon::class);
     }
 
     /**
-     * Get holidays by type
+     * Check if a specific date is a holiday for a salon
      */
-    public static function byType(string $type)
+    public static function isHoliday(int $salonId, string $date): bool
     {
-        return static::where('type', $type);
-    }
-
-    /**
-     * Check if a specific date is a holiday
-     */
-    public static function isHoliday(string $date): bool
-    {
-        $carbon = Carbon::parse($date);
-        return static::where('month', $carbon->month)
-            ->where('day', $carbon->day)
+        return static::where('salon_id', $salonId)
+            ->where('date', Carbon::parse($date)->format('Y-m-d'))
             ->exists();
     }
 
     /**
-     * Get holidays for a specific month
+     * Get holidays for a specific salon and year
      */
-    public static function forMonth(int $month)
+    public static function forSalonAndYear(int $salonId, int $year)
     {
-        return static::where('month', $month);
+        return static::where('salon_id', $salonId)
+            ->whereYear('date', $year)
+            ->orderBy('date');
     }
 
     /**
-     * Get holidays that occur in a specific year (converting month/day to full dates)
+     * Get holidays by type for a salon
      */
-    public static function forYear(int $year)
+    public static function bySalonAndType(int $salonId, string $type)
     {
-        return static::all()->map(function ($holiday) use ($year) {
-            try {
-                $date = Carbon::create($year, $holiday->month, $holiday->day);
-                $holiday->date = $date->format('Y-m-d');
-                return $holiday;
-            } catch (\Exception $e) {
-                // Handle invalid dates like Feb 29 in non-leap years
-                return null;
-            }
-        })->filter();
+        return static::where('salon_id', $salonId)
+            ->where('type', $type);
     }
 
     /**
-     * Get all holidays as date strings for a specific year
+     * Get national holidays for a salon
      */
-    public static function getDatesForYear(int $year): array
+    public static function nationalForSalon(int $salonId)
     {
-        return static::forYear($year)->pluck('date')->toArray();
+        return static::bySalonAndType($salonId, self::TYPE_NATIONAL);
     }
 
     /**
-     * Get holidays between two dates
+     * Get custom holidays for a salon
      */
-    public static function between(string $startDate, string $endDate)
+    public static function customForSalon(int $salonId)
     {
-        $start = Carbon::parse($startDate);
-        $end = Carbon::parse($endDate);
-        
-        $holidays = collect();
-        
-        // Handle single year
-        if ($start->year === $end->year) {
-            $yearHolidays = static::forYear($start->year);
-            $holidays = $yearHolidays->filter(function ($holiday) use ($start, $end) {
-                $holidayDate = Carbon::parse($holiday->date);
-                return $holidayDate->between($start, $end);
-            });
-        } else {
-            // Handle multiple years
-            for ($year = $start->year; $year <= $end->year; $year++) {
-                $yearHolidays = static::forYear($year);
-                $filteredHolidays = $yearHolidays->filter(function ($holiday) use ($start, $end) {
-                    $holidayDate = Carbon::parse($holiday->date);
-                    return $holidayDate->between($start, $end);
-                });
-                $holidays = $holidays->merge($filteredHolidays);
-            }
-        }
-        
-        return $holidays->sortBy('date');
-    }
-
-    /**
-     * Create a formatted display date for the current year
-     */
-    public function getFormattedDateAttribute(): string
-    {
-        try {
-            $date = Carbon::create(now()->year, $this->month, $this->day);
-            return $date->format('d/m');
-        } catch (\Exception $e) {
-            return sprintf('%02d/%02d', $this->day, $this->month);
-        }
-    }
-
-    /**
-     * Get date for a specific year
-     */
-    public function getDateForYear(int $year): ?string
-    {
-        try {
-            $date = Carbon::create($year, $this->month, $this->day);
-            return $date->format('Y-m-d');
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    /**
-     * Override the find method to work with composite keys
-     */
-    public static function find($keys)
-    {
-        if (is_array($keys) && count($keys) === 3) {
-            return static::where('type', $keys[0])
-                ->where('month', $keys[1])
-                ->where('day', $keys[2])
-                ->first();
-        }
-        return null;
-    }
-
-    /**
-     * Override delete to work with composite keys
-     */
-    public function delete()
-    {
-        return static::where('type', $this->type)
-            ->where('month', $this->month)
-            ->where('day', $this->day)
-            ->delete();
+        return static::bySalonAndType($salonId, self::TYPE_CUSTOM);
     }
 }

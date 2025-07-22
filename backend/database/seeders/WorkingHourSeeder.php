@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\Employee;
+use App\Models\Salon;
 use App\Models\WorkingHour;
 
 class WorkingHourSeeder extends Seeder
@@ -13,13 +13,13 @@ class WorkingHourSeeder extends Seeder
      */
     public function run(): void
     {
-        echo "🕐 Seeding working hours...\n";
+        echo "🕐 Creating working hours for salons...\n";
 
-        // Get all employees
-        $employees = Employee::all();
+        // Get all salons
+        $salons = Salon::all();
 
-        if ($employees->count() === 0) {
-            echo "⚠️  No employees found. Run EmployeeSeeder first.\n";
+        if ($salons->isEmpty()) {
+            echo "⚠️  No salons found. Skipping working hours creation.\n";
             return;
         }
 
@@ -40,10 +40,10 @@ class WorkingHourSeeder extends Seeder
 
         $totalCreated = 0;
 
-        foreach ($employees as $employee) {
+        foreach ($salons as $salon) {
             foreach ($standardHours as $weekday => $hours) {
                 WorkingHour::create([
-                    'employee_id' => $employee->id,
+                    'salon_id' => $salon->id,
                     'weekday' => $weekday,
                     'start_time' => $hours['start'],
                     'end_time' => $hours['end'],
@@ -52,10 +52,10 @@ class WorkingHourSeeder extends Seeder
                 ]);
                 $totalCreated++;
             }
+            echo "   ✓ Created working hours for {$salon->name}\n";
         }
 
-        echo "✅ Working hours seeded successfully!\n";
-        echo "📅 Created {$totalCreated} working hour records for {$employees->count()} employees\n";
-        echo "🕐 Standard hours: Mon-Fri 9:00-18:00, Sat 10:00-17:00, Sun closed\n";
+        echo "   🕐 Created {$totalCreated} working hour records for {$salons->count()} salons\n";
+        echo "   📅 Standard hours: Mon-Fri 9:00-18:00, Sat 10:00-17:00, Sun closed\n";
     }
 }

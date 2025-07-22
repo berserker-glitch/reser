@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\User;
 use App\Models\Service;
 use App\Models\WorkingHour;
+use App\Models\Salon;
 use Illuminate\Support\Facades\Log;
 
 class EmployeeSeeder extends Seeder
@@ -17,11 +18,13 @@ class EmployeeSeeder extends Seeder
      */
     public function run(): void
     {
-        // Get the owner user
-        $owner = User::where('role', 'OWNER')->first();
+        echo "👨‍💼 Creating employees for salons...\n";
         
-        if (!$owner) {
-            echo "❌ Owner user not found. Please run UserSeeder first.\n";
+        // Get all salons
+        $salons = Salon::all();
+        
+        if ($salons->isEmpty()) {
+            echo "⚠️  No salons found. Skipping employee creation.\n";
             return;
         }
 
@@ -47,41 +50,39 @@ class EmployeeSeeder extends Seeder
             ],
         ];
 
+        $totalCreated = 0;
+        
+        foreach ($salons as $salon) {
         foreach ($employees as $employeeData) {
             // Create employee
             $employee = Employee::create([
-                'user_id' => $owner->id,
+                    'salon_id' => $salon->id,
+                    'user_id' => $salon->owner_id,
                 'full_name' => $employeeData['full_name'],
                 'phone' => $employeeData['phone'],
                 'note' => $employeeData['note'],
             ]);
 
-            // Attach services
-            $services = Service::whereIn('name', $employeeData['services'])->get();
+                // Attach services from this salon
+                $services = Service::where('salon_id', $salon->id)
+                    ->whereIn('name', $employeeData['services'])
+                    ->get();
             $employee->services()->attach($services->pluck('id'));
 
             Log::info('Seeding services for employee', [
                 'employee' => $employee->full_name,
+                    'salon' => $salon->name,
                 'services_to_find' => $employeeData['services'],
                 'services_found' => $services->pluck('name')->toArray(),
                 'service_ids_attached' => $services->pluck('id')->toArray(),
             ]);
 
-            // Create working hours (Monday to Saturday, 9:00-18:00, break 12:00-13:00)
-            for ($day = 1; $day <= 6; $day++) {
-                WorkingHour::create([
-                    'employee_id' => $employee->id,
-                    'weekday' => $day,
-                    'start_time' => '09:00:00',
-                    'end_time' => '18:00:00',
-                    'break_start' => '12:00:00',
-                    'break_end' => '13:00:00',
-                ]);
+                $totalCreated++;
+            }
+            
+            echo "   ✓ Created " . count($employees) . " employees for {$salon->name}\n";
             }
 
-            echo "✓ Employee {$employee->full_name} created with " . count($employeeData['services']) . " services\n";
-        }
-
-        echo "✓ Employees seeded successfully\n";
+        echo "   👨‍💼 Created {$totalCreated} employees total\n";
     }
 }

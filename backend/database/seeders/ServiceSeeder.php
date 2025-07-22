@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Service;
+use App\Models\Salon;
 
 class ServiceSeeder extends Seeder
 {
@@ -76,10 +77,28 @@ class ServiceSeeder extends Seeder
             ],
         ];
 
-        foreach ($services as $service) {
-            Service::create($service);
+        echo "💇‍♀️ Creating services for salons...\n";
+
+        // Get all salons
+        $salons = Salon::all();
+        
+        if ($salons->isEmpty()) {
+            echo "⚠️  No salons found. Skipping service creation.\n";
+            return;
         }
 
-        echo "✓ Services seeded successfully\n";
+        $totalCreated = 0;
+        
+        foreach ($salons as $salon) {
+        foreach ($services as $service) {
+                $serviceData = $service;
+                $serviceData['salon_id'] = $salon->id;
+                Service::create($serviceData);
+                $totalCreated++;
+            }
+            echo "   ✓ Created " . count($services) . " services for {$salon->name}\n";
+        }
+
+        echo "   💇‍♀️ Created {$totalCreated} services total\n";
     }
 }

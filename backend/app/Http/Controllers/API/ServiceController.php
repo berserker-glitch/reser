@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  * - Deleting services (with safety checks)
  * - Validation and business rules enforcement
  */
-class ServiceController extends Controller
+class ServiceController extends BaseController
 {
     /**
      * Display a listing of all services
@@ -36,8 +35,14 @@ class ServiceController extends Controller
         ]);
 
         try {
-            // Get all services with optional filtering
-            $query = Service::query();
+            // Get salon ID and validate access
+            [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+            if ($errorResponse) {
+                return $errorResponse;
+            }
+
+            // Get services filtered by salon
+            $query = Service::where('salon_id', $salonId);
 
             // Add search functionality if search parameter provided
             if ($request->has('search') && !empty($request->search)) {
@@ -96,13 +101,31 @@ class ServiceController extends Controller
             'request_data' => $request->all()
         ]);
 
+        // Get salon ID and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         // Validate input data
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:120|unique:services,name',
+            'name' => 'required|string|max:120',
             'description' => 'nullable|string|max:500',
             'duration_min' => 'required|integer|min:15|max:480', // 15 minutes to 8 hours
             'price_dhs' => 'required|numeric|min:0|max:9999.99'
         ]);
+
+        // Check for unique name within salon
+        $existingService = Service::where('salon_id', $salonId)
+            ->where('name', $request->name)
+            ->first();
+            
+        if ($existingService) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['name' => ['Service name already exists in this salon']]
+            ], 422);
+        }
 
         if ($validator->fails()) {
             Log::warning('ServiceController@store - Validation failed', [
@@ -119,6 +142,7 @@ class ServiceController extends Controller
         try {
             // Create the service
             $service = Service::create([
+                'salon_id' => $salonId,
                 'name' => $request->name,
                 'description' => $request->description,
                 'duration_min' => $request->duration_min,

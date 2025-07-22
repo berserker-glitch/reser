@@ -49,106 +49,106 @@ Route::get('/availability', [AvailabilityController::class, 'index']);
 Route::post('/availability/check', [AvailabilityController::class, 'check']);
 Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
 
-// Public holidays route (for clients to see unavailable dates)
-Route::get('/public/holidays', function () {
+// Public calendar availability route (for client booking calendar)
+Route::get('/calendar-availability', function (Request $request) {
     try {
-        // Get current holiday settings to determine which holidays to show
-        $settings = \App\Models\HolidaySetting::current();
+        $startDate = $request->query('start_date', now()->format('Y-m-d'));
+        $endDate = $request->query('end_date', now()->addMonth()->format('Y-m-d'));
         
-        $currentYear = date('Y');
-        $query = \App\Models\Holiday::query();
-        
-        // Filter holidays based on the owner's system choice
-        if ($settings->holiday_system_type === 'standard') {
-            $query->where('type', 'standard');
-        } elseif ($settings->holiday_system_type === 'custom') {
-            $query->where('type', 'custom');
+        // Validate date format
+        if (!strtotime($startDate) || !strtotime($endDate)) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid date format. Use Y-m-d format.'
+            ], 400);
         }
-        // If no setting or 'both', show all holidays (fallback)
         
-        $holidays = $query->get();
+        $start = \Carbon\Carbon::parse($startDate);
+        $end = \Carbon\Carbon::parse($endDate);
         
-        // Convert to full dates for the current year and format for frontend
-        $holidaysWithDates = $holidays->map(function ($holiday) use ($currentYear) {
-            $date = $holiday->getDateForYear($currentYear);
-            if ($date) {
-                return [
-                    'id' => $date, // Use the calculated date as ID for frontend compatibility
-                    'name' => $holiday->name,
-                    'type' => $holiday->type ?? 'national',
-                    'date' => $date
-                ];
-            }
-            return null;
-        })->filter(); // Remove null entries
+        // Prevent requesting too large date ranges (max 3 months)
+        if ($start->diffInDays($end) > 90) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Date range too large. Maximum 90 days allowed.'
+            ], 400);
+        }
         
-        return response()->json($holidaysWithDates->values());
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'Unable to fetch holidays',
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
-
-// Public holiday settings route (for clients to understand which holiday system is active)
-Route::get('/public/holiday-settings', function () {
-    try {
-        $settings = \App\Models\HolidaySetting::current();
-        return response()->json([
-            'holiday_system_type' => $settings->holiday_system_type,
-            'description' => $settings->holiday_system_type === 'standard' 
-                ? 'Moroccan national holidays' 
-                : 'Personalized holidays'
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'Unable to fetch holiday settings',
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
-
-// Public working hours route (for clients to see working days)
-Route::get('/public/working-hours', function () {
-    try {
-        // Get all employees
-        $employees = \App\Models\Employee::select('id', 'full_name')->get();
+        // Get all holidays to check against each date
+        $allHolidays = \App\Models\Holiday::all();
+        $holidaysByDate = [];
         
-        $weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        // Create a map of holidays by date for the current year
+        foreach ($allHolidays as $holiday) {
+            $holidayDate = sprintf('%04d-%02d-%02d', $start->year, $holiday->month, $holiday->day);
+            $holidaysByDate[$holidayDate] = $holiday->name;
+        }
         
-        // Create working schedule for all employees for all days
-        $grouped = $employees->map(function ($employee) use ($weekdays) {
-            $schedule = [];
+        // Get working hours for all weekdays (global working hours)
+        $workingHours = \App\Models\WorkingHour::all()->keyBy('weekday');
+        
+        // Generate calendar data for each day in the range
+        $calendarData = [];
+        $currentDate = $start->copy();
+        
+        while ($currentDate->lte($end)) {
+            $dateStr = $currentDate->format('Y-m-d');
+            $weekday = $currentDate->dayOfWeek; // 0=Sunday, 6=Saturday
             
-            // Create a schedule entry for each day of the week
-            for ($weekday = 0; $weekday <= 6; $weekday++) {
-                $schedule[] = [
-                    'id' => $employee->id * 10 + $weekday, // Generate unique ID
-                    'weekday' => $weekday,
-                    'weekday_name' => $weekdays[$weekday],
-                    'start_time' => '09:00', // Default working hours
-                    'end_time' => '18:00',
-                    'break_start' => '12:00',
-                    'break_end' => '13:00',
-                    'total_hours' => 8,
-                ];
-            }
+            // Check if it's a holiday
+            $isHoliday = isset($holidaysByDate[$dateStr]);
+            $holidayName = $isHoliday ? $holidaysByDate[$dateStr] : null;
             
-            return [
-                'employee' => [
-                    'id' => $employee->id,
-                    'full_name' => $employee->full_name,
-                ],
-                'schedule' => $schedule,
+            // Check if it's a working day
+            $workingHour = $workingHours->get($weekday);
+            $isWorkingDay = $workingHour && $workingHour->start_time && $workingHour->end_time;
+            
+            // A day is bookable if it's a working day and not a holiday
+            $isBookable = $isWorkingDay && !$isHoliday && !$currentDate->isPast();
+            
+            $calendarData[] = [
+                'date' => $dateStr,
+                'day_of_week' => $weekday,
+                'day_name' => $currentDate->format('l'),
+                'is_holiday' => $isHoliday,
+                'holiday_name' => $holidayName,
+                'is_working_day' => $isWorkingDay,
+                'is_bookable' => $isBookable,
+                'working_hours' => $isWorkingDay ? [
+                    'start_time' => $workingHour->start_time,
+                    'end_time' => $workingHour->end_time,
+                    'break_start' => $workingHour->break_start,
+                    'break_end' => $workingHour->break_end,
+                ] : null
             ];
-        });
+            
+            $currentDate->addDay();
+        }
         
-        return response()->json($grouped);
-    } catch (\Exception $e) {
+        \Log::info('Calendar availability fetched', [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'total_days' => count($calendarData),
+            'holidays_count' => count($holidaysByDate),
+            'bookable_days' => collect($calendarData)->where('is_bookable', true)->count()
+        ]);
+        
         return response()->json([
-            'error' => 'Unable to fetch working hours',
-            'message' => $e->getMessage()
+            'success' => true,
+            'data' => $calendarData,
+            'summary' => [
+                'total_days' => count($calendarData),
+                'holidays' => collect($calendarData)->where('is_holiday', true)->count(),
+                'working_days' => collect($calendarData)->where('is_working_day', true)->count(),
+                'bookable_days' => collect($calendarData)->where('is_bookable', true)->count(),
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Calendar availability error: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'error' => 'Unable to fetch calendar availability'
         ], 500);
     }
 });

@@ -13,15 +13,20 @@ return new class extends Migration
     {
         Schema::create('services', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('salon_id');
             $table->string('name', 120);
             $table->text('description')->nullable();
             $table->smallInteger('duration_min')->unsigned()->default(30);
             $table->decimal('price_dhs', 8, 2);
             $table->timestamps();
+
+            // Foreign key constraints
+            $table->foreign('salon_id')->references('id')->on('salons')->onDelete('cascade');
             
             // Indexes for performance
-            $table->index('name', 'idx_name');
-            $table->index('duration_min', 'idx_duration');
+            $table->index('salon_id');
+            $table->index('name');
+            $table->index('duration_min');
         });
     }
 
@@ -32,4 +37,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('services');
     }
-};
+}; 

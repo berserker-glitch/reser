@@ -25,12 +25,26 @@ return Application::configure(basePath: dirname(__DIR__))
         
         // Configure authentication to return JSON responses for API routes
         $middleware->redirectGuestsTo(function ($request) {
+            // For API routes, return null to trigger 401 JSON response
             if ($request->is('api/*') || $request->expectsJson()) {
-                return null; // Return null for API routes to get 401 response
+                return null;
             }
-            return route('login'); // Only redirect web routes
+            // Only redirect web routes if login route exists
+            if (\Illuminate\Support\Facades\Route::has('login')) {
+                return route('login');
+            }
+            return null;
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Ensure API routes always return JSON responses for authentication errors
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated',
+                    'error' => 'Authentication required'
+                ], 401);
+            }
+        });
     })->create();

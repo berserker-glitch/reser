@@ -15,6 +15,7 @@ class WorkingHour extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'salon_id',
         'weekday',
         'start_time',
         'end_time',
@@ -34,4 +35,12 @@ class WorkingHour extends Model
         'break_start' => 'string',
         'break_end' => 'string',
     ];
+
+    /**
+     * Get the salon that owns the working hours.
+     */
+    public function salon()
+    {
+        return $this->belongsTo(Salon::class);
+    }
 }
