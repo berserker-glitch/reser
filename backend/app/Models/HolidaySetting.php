@@ -15,6 +15,7 @@ class HolidaySetting extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'salon_id',
         'holiday_system_type',
         'use_moroccan_holidays',
         'auto_import_holidays',
@@ -39,11 +40,23 @@ class HolidaySetting extends Model
     const SYSTEM_CUSTOM = 'custom';
 
     /**
-     * Get the current holiday settings (singleton pattern)
+     * Get the salon that owns the holiday settings.
      */
-    public static function current()
+    public function salon()
     {
-        return static::first() ?: static::create([
+        return $this->belongsTo(Salon::class);
+    }
+
+    /**
+     * Get the current holiday settings for a specific salon (singleton pattern per salon)
+     * 
+     * @param int $salonId
+     * @return HolidaySetting
+     */
+    public static function current(int $salonId)
+    {
+        return static::where('salon_id', $salonId)->first() ?: static::create([
+            'salon_id' => $salonId,
             'holiday_system_type' => self::SYSTEM_STANDARD,
             'use_moroccan_holidays' => true,
             'auto_import_holidays' => true,
@@ -51,11 +64,15 @@ class HolidaySetting extends Model
     }
 
     /**
-     * Update the current settings
+     * Update the current settings for a specific salon
+     * 
+     * @param int $salonId
+     * @param array $attributes
+     * @return HolidaySetting
      */
-    public static function updateCurrent(array $attributes)
+    public static function updateCurrent(int $salonId, array $attributes)
     {
-        $settings = static::current();
+        $settings = static::current($salonId);
         $settings->update($attributes);
         return $settings;
     }
@@ -82,5 +99,26 @@ class HolidaySetting extends Model
     public function shouldAutoImport(): bool
     {
         return $this->auto_import_holidays && $this->isUsingStandardHolidays();
+    }
+
+    /**
+     * Get all settings by salon for admin overview
+     * 
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public static function getAllBySalon()
+    {
+        return static::with('salon')->get();
+    }
+
+    /**
+     * Get settings for multiple salons
+     * 
+     * @param array $salonIds
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public static function forSalons(array $salonIds)
+    {
+        return static::whereIn('salon_id', $salonIds)->with('salon')->get();
     }
 }

@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\AvailabilityController;
 use App\Http\Controllers\API\ReservationController;
@@ -10,6 +12,7 @@ use App\Http\Controllers\API\ServiceController;
 use App\Http\Controllers\API\WorkingHourController;
 use App\Models\Service;
 use App\Models\WorkingHour;
+use App\Models\Salon;
 
 /*
 |--------------------------------------------------------------------------
@@ -31,12 +34,36 @@ Route::group([
     Route::post('login', [AuthController::class, 'login']);
 });
 
-// Public services route (for testing and client access)
-Route::get('/services', function () {
+// Public services route (for client access - requires salon_id)
+Route::get('/services', function (Request $request) {
     try {
-        $services = Service::with('employees')->get();
+        $validator = Validator::make($request->all(), [
+            'salon_id' => 'required|integer|exists:salons,id'
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Salon ID is required',
+                'messages' => $validator->errors()
+            ], 422);
+        }
+        
+        $salonId = $request->salon_id;
+        $services = Service::where('salon_id', $salonId)->with('employees')->get();
+        
+        Log::info('Public services fetched', [
+            'salon_id' => $salonId,
+            'services_count' => $services->count(),
+            'ip' => $request->ip()
+        ]);
+        
         return response()->json($services);
     } catch (\Exception $e) {
+        Log::error('Public services fetch failed', [
+            'error' => $e->getMessage(),
+            'salon_id' => $request->salon_id ?? 'missing'
+        ]);
+        
         return response()->json([
             'error' => 'Unable to fetch services',
             'message' => $e->getMessage()
@@ -52,6 +79,21 @@ Route::get('/availability/nearest', [AvailabilityController::class, 'nearest']);
 // Public calendar availability route (for client booking calendar)
 Route::get('/calendar-availability', function (Request $request) {
     try {
+        $validator = Validator::make($request->all(), [
+            'salon_id' => 'required|integer|exists:salons,id',
+            'start_date' => 'date_format:Y-m-d',
+            'end_date' => 'date_format:Y-m-d'
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Salon ID is required',
+                'messages' => $validator->errors()
+            ], 422);
+        }
+        
+        $salonId = $request->salon_id;
         $startDate = $request->query('start_date', now()->format('Y-m-d'));
         $endDate = $request->query('end_date', now()->addMonth()->format('Y-m-d'));
         
@@ -74,18 +116,23 @@ Route::get('/calendar-availability', function (Request $request) {
             ], 400);
         }
         
-        // Get all holidays to check against each date
-        $allHolidays = \App\Models\Holiday::all();
+        // Get holidays for the specific salon
+        $holidays = \App\Models\Holiday::where('salon_id', $salonId)
+            ->whereYear('date', $start->year)
+            ->get();
+            
         $holidaysByDate = [];
         
-        // Create a map of holidays by date for the current year
-        foreach ($allHolidays as $holiday) {
-            $holidayDate = sprintf('%04d-%02d-%02d', $start->year, $holiday->month, $holiday->day);
+        // Create a map of holidays by date
+        foreach ($holidays as $holiday) {
+            $holidayDate = $holiday->date->format('Y-m-d');
             $holidaysByDate[$holidayDate] = $holiday->name;
         }
         
-        // Get working hours for all weekdays (global working hours)
-        $workingHours = \App\Models\WorkingHour::all()->keyBy('weekday');
+        // Get working hours for the specific salon
+        $workingHours = \App\Models\WorkingHour::where('salon_id', $salonId)
+            ->get()
+            ->keyBy('weekday');
         
         // Generate calendar data for each day in the range
         $calendarData = [];
@@ -126,6 +173,7 @@ Route::get('/calendar-availability', function (Request $request) {
         }
         
         \Log::info('Calendar availability fetched', [
+            'salon_id' => $salonId,
             'start_date' => $startDate,
             'end_date' => $endDate,
             'total_days' => count($calendarData),
@@ -145,7 +193,9 @@ Route::get('/calendar-availability', function (Request $request) {
         ]);
         
     } catch (\Exception $e) {
-        \Log::error('Calendar availability error: ' . $e->getMessage());
+        \Log::error('Calendar availability error: ' . $e->getMessage(), [
+            'salon_id' => $request->salon_id ?? 'missing'
+        ]);
         return response()->json([
             'success' => false,
             'error' => 'Unable to fetch calendar availability'
@@ -191,22 +241,48 @@ Route::group([
         ]);
     });
     
-    // Holidays endpoint
+    // Holidays endpoint (requires salon_id for isolation)
     Route::get('/holidays', function (Request $request) {
         try {
+            $validator = Validator::make($request->all(), [
+                'salon_id' => 'required|integer|exists:salons,id',
+                'year' => 'integer|min:2020|max:2030'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Salon ID is required',
+                    'messages' => $validator->errors()
+                ], 422);
+            }
+            
+            $salonId = $request->salon_id;
             $year = $request->query('year', now()->year);
             
-            // Get holidays for the specified year
-            $holidays = \App\Models\Holiday::whereYear('id', $year)
-                ->orderBy('id')
+            // Get holidays for the specified salon and year
+            $holidays = \App\Models\Holiday::where('salon_id', $salonId)
+                ->whereYear('date', $year)
+                ->orderBy('date')
                 ->get();
             
-            return response()->json($holidays);
+            \Log::info('Holidays fetched', [
+                'salon_id' => $salonId,
+                'year' => $year,
+                'count' => $holidays->count(),
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $holidays
+            ]);
             
         } catch (\Exception $e) {
             \Log::error('Failed to fetch holidays', [
                 'error' => $e->getMessage(),
-                'user_id' => auth()->id()
+                'user_id' => auth()->id(),
+                'salon_id' => $request->salon_id ?? 'missing'
             ]);
             
             return response()->json([
@@ -216,18 +292,74 @@ Route::group([
         }
     });
     
-    // Working hours for current user (global working hours that apply to all employees)
+    // Working hours for current user's salon
     Route::get('/my-working-hours', function (Request $request) {
         try {
-            // Get global working hours (no longer employee-specific)
-            $workingHours = WorkingHour::orderBy('weekday')->get();
+            $user = auth()->user();
+            
+            // Only allow owners to view working hours
+            if ($user->role !== 'OWNER') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only salon owners can view working hours.'
+                ], 403);
+            }
+            
+            // Get the user's salon
+            $salon = $user->salon;
+            if (!$salon) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No salon found for this owner.'
+                ], 404);
+            }
+            
+            // Get working hours for this salon, ordered by weekday
+            $workingHours = WorkingHour::where('salon_id', $salon->id)
+                ->orderBy('weekday')
+                ->get();
+            
+            // Create a complete week array (Sunday = 0, Saturday = 6)
+            $weekData = [];
+            for ($i = 0; $i <= 6; $i++) {
+                $weekData[] = [
+                    'weekday' => $i,
+                    'start_time' => null,
+                    'end_time' => null,
+                    'break_start' => null,
+                    'break_end' => null,
+                ];
+            }
+            
+            // Fill in the actual working hours data
+            foreach ($workingHours as $hour) {
+                $weekData[$hour->weekday] = [
+                    'weekday' => $hour->weekday,
+                    'start_time' => $hour->start_time,
+                    'end_time' => $hour->end_time,
+                    'break_start' => $hour->break_start,
+                    'break_end' => $hour->break_end,
+                ];
+            }
+            
+            Log::info('Working hours fetched successfully', [
+                'salon_id' => $salon->id,
+                'user_id' => $user->id,
+                'working_hours_count' => count($workingHours)
+            ]);
             
             return response()->json([
                 'success' => true,
-                'working_hours' => $workingHours
+                'working_hours' => $weekData
             ]);
             
         } catch (\Exception $e) {
+            Log::error('Failed to fetch working hours', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch working hours',
@@ -236,9 +368,28 @@ Route::group([
         }
     });
     
-    // Update working hours (global working hours that apply to all employees)
+    // Update working hours (salon-specific working hours)
     Route::put('/my-working-hours', function (Request $request) {
         try {
+            $user = auth()->user();
+            
+            // Only allow owners to update working hours
+            if ($user->role !== 'OWNER') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only salon owners can update working hours.'
+                ], 403);
+            }
+            
+            // Get the user's salon
+            $salon = $user->salon;
+            if (!$salon) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No salon found for this owner.'
+                ], 404);
+            }
+            
             $validated = $request->validate([
                 'working_hours' => 'required|array',
                 'working_hours.*.weekday' => 'required|integer|min:0|max:6',
@@ -248,12 +399,13 @@ Route::group([
                 'working_hours.*.break_end' => 'nullable|date_format:H:i',
             ]);
             
-            // Delete all existing working hours (global system)
-            WorkingHour::truncate();
+            // Delete existing working hours for this salon
+            WorkingHour::where('salon_id', $salon->id)->delete();
             
             // Create new working hours for all provided days (including non-working days with null times)
             foreach ($validated['working_hours'] as $hours) {
                 WorkingHour::create([
+                    'salon_id' => $salon->id, // Add the required salon_id
                     'weekday' => $hours['weekday'],
                     'start_time' => $hours['start_time'], // Can be null for non-working days
                     'end_time' => $hours['end_time'], // Can be null for non-working days
@@ -262,12 +414,24 @@ Route::group([
                 ]);
             }
             
+            Log::info('Working hours updated successfully', [
+                'salon_id' => $salon->id,
+                'user_id' => $user->id,
+                'working_hours_count' => count($validated['working_hours'])
+            ]);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Working hours updated successfully'
             ]);
             
         } catch (\Exception $e) {
+            Log::error('Failed to update working hours', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update working hours',
@@ -280,15 +444,30 @@ Route::group([
     Route::apiResource('reservations', ReservationController::class);
 });
 
-// Public working hours endpoint - show all employees working every day
-Route::get('/working-hours', function () {
+// Public working hours endpoint - show salon employees with working hours (requires salon_id)
+Route::get('/working-hours', function (Request $request) {
     try {
-        // Get all employees
-        $employees = \App\Models\Employee::select('id', 'full_name')->get();
+        $validator = Validator::make($request->all(), [
+            'salon_id' => 'required|integer|exists:salons,id'
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Salon ID is required',
+                'messages' => $validator->errors()
+            ], 422);
+        }
+        
+        $salonId = $request->salon_id;
+        
+        // Get employees for the specific salon
+        $employees = \App\Models\Employee::where('salon_id', $salonId)
+            ->select('id', 'full_name')
+            ->get();
         
         $weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         
-        // Create working schedule for all employees for all days
+        // Create working schedule for salon employees
         $grouped = $employees->map(function ($employee) use ($weekdays) {
             $schedule = [];
             
@@ -312,9 +491,16 @@ Route::get('/working-hours', function () {
             ];
         });
         
+        Log::info('Public working hours fetched', [
+            'salon_id' => $salonId,
+            'employees_count' => $employees->count()
+        ]);
+        
         return response()->json($grouped);
     } catch (\Exception $e) {
-        \Log::error('Working hours fetch error: ' . $e->getMessage());
+        \Log::error('Working hours fetch error: ' . $e->getMessage(), [
+            'salon_id' => $request->salon_id ?? 'missing'
+        ]);
         return response()->json(['error' => 'Unable to fetch working hours'], 500);
     }
 });
@@ -343,48 +529,181 @@ Route::group([
     Route::post('holidays/import-moroccan', [\App\Http\Controllers\API\HolidayController::class, 'importMoroccanHolidays']);
     Route::post('holidays/bulk-action', [\App\Http\Controllers\API\HolidayController::class, 'bulkAction']);
     
-    // Custom routes for holidays that handle composite keys
+    // Holiday CRUD routes (standard RESTful)
     Route::get('holidays', [\App\Http\Controllers\API\HolidayController::class, 'index']);
     Route::post('holidays', [\App\Http\Controllers\API\HolidayController::class, 'store']);
-    Route::delete('holidays', [\App\Http\Controllers\API\HolidayController::class, 'destroy']); // DELETE without ID, data in body
-    Route::put('holidays', [\App\Http\Controllers\API\HolidayController::class, 'update']);
+    Route::get('holidays/{holiday}', [\App\Http\Controllers\API\HolidayController::class, 'show']);
+    Route::put('holidays/{holiday}', [\App\Http\Controllers\API\HolidayController::class, 'update']);
+    Route::delete('holidays/{holiday}', [\App\Http\Controllers\API\HolidayController::class, 'destroy']);
     
     // Working hours management (full CRUD for owners)
     Route::apiResource('working-hours', WorkingHourController::class);
+    
+    // Admin-specific routes that auto-detect salon from authenticated owner
+    Route::get('services-list', function () {
+        try {
+            $user = auth()->user();
+            $salon = $user->salon;
+            
+            if (!$salon) {
+                return response()->json([
+                    'error' => 'No salon found for this owner'
+                ], 404);
+            }
+            
+            $salonId = $salon->id;
+            $services = Service::where('salon_id', $salonId)->with('employees')->get();
+            
+            Log::info('Admin services fetched', [
+                'salon_id' => $salonId,
+                'services_count' => $services->count(),
+                'user_id' => $user->id
+            ]);
+            
+            return response()->json($services);
+        } catch (\Exception $e) {
+            Log::error('Admin services fetch failed', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'error' => 'Unable to fetch services',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+    
+    Route::get('working-hours-list', function () {
+        try {
+            $user = auth()->user();
+            $salon = $user->salon;
+            
+            if (!$salon) {
+                return response()->json([
+                    'error' => 'No salon found for this owner'
+                ], 404);
+            }
+            
+            $salonId = $salon->id;
+            
+            // Get employees for the owner's salon
+            $employees = \App\Models\Employee::where('salon_id', $salonId)
+                ->select('id', 'full_name')
+                ->get();
+            
+            $weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            // Create working schedule for salon employees
+            $grouped = $employees->map(function ($employee) use ($weekdays) {
+                $schedule = [];
+                
+                // Create a schedule entry for each day of the week
+                for ($weekday = 0; $weekday <= 6; $weekday++) {
+                    $schedule[] = [
+                        'id' => $employee->id * 10 + $weekday, // Generate unique ID
+                        'weekday' => $weekday,
+                        'weekday_name' => $weekdays[$weekday],
+                        'start_time' => '09:00', // Default working hours
+                        'end_time' => '18:00',   // Default working hours
+                        'break_start' => '12:00', // Default lunch break
+                        'break_end' => '13:00',
+                        'total_hours' => 8 // 9 hours - 1 hour break = 8 working hours
+                    ];
+                }
+                
+                return [
+                    'employee' => $employee,
+                    'schedule' => $schedule
+                ];
+            });
+            
+            Log::info('Admin working hours fetched', [
+                'salon_id' => $salonId,
+                'employees_count' => $employees->count(),
+                'user_id' => $user->id
+            ]);
+            
+            return response()->json($grouped);
+        } catch (\Exception $e) {
+            Log::error('Admin working hours fetch error', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+            return response()->json(['error' => 'Unable to fetch working hours'], 500);
+        }
+    });
     Route::post('working-hours/bulk', [WorkingHourController::class, 'bulkStore']);
     Route::get('employees/{employee}/working-hours', [WorkingHourController::class, 'employeeSummary']);
     
     // Reservation management (full CRUD for owners)
     Route::apiResource('reservations', ReservationController::class);
     
-    // Dashboard and statistics
+    // Dashboard and statistics (salon-specific for owners)
     Route::get('/dashboard/stats', function () {
         try {
+            $user = auth()->user();
+            $salon = $user->salon;
+            
+            if (!$salon) {
+                return response()->json([
+                    'error' => 'No salon found for this owner'
+                ], 404);
+            }
+            
+            $salonId = $salon->id;
+            
             $stats = [
-                'total_reservations' => \App\Models\Reservation::count(),
-                'total_employees' => \App\Models\Employee::count(),
-                'total_services' => \App\Models\Service::count(),
-                'upcoming_reservations' => \App\Models\Reservation::where('start_at', '>', now())->count(),
-                'today_reservations' => \App\Models\Reservation::whereDate('start_at', today())->count(),
-                'revenue_this_month' => \App\Models\Reservation::join('services', 'reservations.service_id', '=', 'services.id')
+                'total_reservations' => \App\Models\Reservation::where('salon_id', $salonId)->count(),
+                'total_employees' => \App\Models\Employee::where('salon_id', $salonId)->count(),
+                'total_services' => \App\Models\Service::where('salon_id', $salonId)->count(),
+                'upcoming_reservations' => \App\Models\Reservation::where('salon_id', $salonId)
+                    ->where('start_at', '>', now())->count(),
+                'today_reservations' => \App\Models\Reservation::where('salon_id', $salonId)
+                    ->whereDate('start_at', today())->count(),
+                'revenue_this_month' => \App\Models\Reservation::where('salon_id', $salonId)
+                    ->join('services', 'reservations.service_id', '=', 'services.id')
                     ->whereMonth('start_at', now()->month)
                     ->where('status', 'COMPLETED')
                     ->sum('price_dhs')
             ];
             
+            Log::info('Dashboard stats fetched', [
+                'salon_id' => $salonId,
+                'user_id' => $user->id,
+                'stats' => $stats
+            ]);
+            
             return response()->json($stats);
         } catch (\Exception $e) {
-        return response()->json([
+            Log::error('Dashboard stats error', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
                 'error' => 'Unable to fetch dashboard statistics',
                 'message' => $e->getMessage()
             ], 500);
         }
     });
     
-    // Reports routes
+    // Reports routes (salon-specific for owners)
     Route::get('/reports/reservations', function (Request $request) {
         try {
-            $query = \App\Models\Reservation::with(['client', 'employee', 'service']);
+            $user = auth()->user();
+            $salon = $user->salon;
+            
+            if (!$salon) {
+                return response()->json([
+                    'error' => 'No salon found for this owner'
+                ], 404);
+            }
+            
+            $salonId = $salon->id;
+            
+            $query = \App\Models\Reservation::with(['client', 'employee', 'service'])
+                ->where('salon_id', $salonId);
             
             // Date filtering
             if ($request->start_date) {
@@ -401,9 +720,20 @@ Route::group([
             
             $reservations = $query->orderBy('start_at', 'desc')->paginate(50);
             
+            Log::info('Reservation reports fetched', [
+                'salon_id' => $salonId,
+                'user_id' => $user->id,
+                'total_reservations' => $reservations->total()
+            ]);
+            
             return response()->json($reservations);
         } catch (\Exception $e) {
-        return response()->json([
+            Log::error('Reservation reports error', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
                 'error' => 'Unable to fetch reservation reports',
                 'message' => $e->getMessage()
             ], 500);

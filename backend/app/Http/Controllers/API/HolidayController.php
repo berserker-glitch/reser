@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\API\BaseController;
 use App\Models\Holiday;
 use App\Models\HolidaySetting;
 use Illuminate\Http\Request;
@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 
-class HolidayController extends Controller
+class HolidayController extends BaseController
 {
     /**
      * Display a listing of holidays
@@ -24,35 +24,32 @@ class HolidayController extends Controller
         ]);
 
         try {
-            $query = Holiday::query();
+            // Get salon context and validate access
+            [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+            if ($errorResponse) {
+                return $errorResponse;
+            }
+
+            $query = Holiday::where('salon_id', $salonId);
 
             // Filter by type
             if ($request->has('type')) {
                 $query->where('type', $request->type);
             }
 
-            // No active status filter needed (all holidays are active)
-
-            // If year is requested, convert to full dates for that year
+            // If year is requested, filter by year
             if ($request->has('year')) {
                 $year = (int) $request->year;
-                $holidays = $query->get();
-                
-                // Convert to full dates for the specified year
-                $holidaysWithDates = $holidays->map(function ($holiday) use ($year) {
-                    $holiday->date = $holiday->getDateForYear($year);
-                    return $holiday;
-                })->filter(function ($holiday) {
-                    return $holiday->date !== null; // Filter out invalid dates
-                });
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $holidaysWithDates->values()
-                ]);
+                $query->whereYear('date', $year);
             }
 
-            $holidays = $query->orderBy('month')->orderBy('day')->get();
+            $holidays = $query->orderBy('date')->get();
+
+            Log::info('Holidays retrieved successfully', [
+                'salon_id' => $salonId,
+                'count' => $holidays->count(),
+                'user_id' => auth()->id()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -90,14 +87,27 @@ class HolidayController extends Controller
             'request_data' => $request->all()
         ]);
 
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'month' => 'required|integer|min:1|max:12',
             'day' => 'required|integer|min:1|max:31',
-            'type' => 'in:standard,custom'
+            'type' => 'in:standard,custom,STANDARD,CUSTOM,NATIONAL'
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Holiday creation validation failed', [
+                'user_id' => auth()->id(),
+                'salon_id' => $salonId,
+                'errors' => $validator->errors(),
+                'request_data' => $request->all()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'errors' => $validator->errors()
@@ -105,29 +115,51 @@ class HolidayController extends Controller
         }
 
         try {
-            // Validate that the date exists
             $month = $request->month;
             $day = $request->day;
+            $year = now()->year; // Use current year for the holiday
             
-            if (!checkdate($month, $day, 2024)) { // Use 2024 (leap year) for validation
+            // Validate that the date exists
+            if (!checkdate($month, $day, $year)) {
                 return response()->json([
                     'success' => false,
                     'error' => 'Invalid date combination'
                 ], 422);
             }
+            
+            $date = Carbon::create($year, $month, $day);
+            
+            // Check if holiday already exists for this salon and date
+            $existing = Holiday::where('salon_id', $salonId)
+                ->where('date', $date->format('Y-m-d'))
+                ->first();
+                
+            if ($existing) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Holiday already exists for this date'
+                ], 422);
+            }
+
+            // Normalize type to uppercase
+            $type = strtoupper($request->type);
+            if ($type === 'STANDARD') {
+                $type = 'NATIONAL'; // Map standard to NATIONAL for consistency
+            }
 
             $holiday = Holiday::create([
-                'type' => $request->type ?? 'custom',
+                'salon_id' => $salonId,
+                'type' => $type,
                 'name' => $request->name,
-                'month' => $month,
-                'day' => $day
+                'date' => $date
             ]);
 
             Log::info('Holiday created successfully', [
                 'holiday_id' => $holiday->id,
+                'salon_id' => $salonId,
                 'name' => $holiday->name,
-                'month' => $holiday->month,
-                'day' => $holiday->day,
+                'date' => $holiday->date,
+                'type' => $holiday->type,
                 'user_id' => auth()->id()
             ]);
 
@@ -138,6 +170,7 @@ class HolidayController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Failed to create holiday', [
+                'salon_id' => $salonId,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()
             ]);
@@ -150,16 +183,18 @@ class HolidayController extends Controller
     }
 
     /**
-     * Display the specified holiday (using composite key)
+     * Display the specified holiday
      */
-    public function show(Request $request)
+    public function show(Request $request, Holiday $holiday)
     {
-        $holiday = Holiday::where('type', $request->type)
-            ->where('month', $request->month)
-            ->where('day', $request->day)
-            ->first();
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
 
-        if (!$holiday) {
+        // Ensure holiday belongs to the salon
+        if ($holiday->salon_id !== $salonId) {
             return response()->json([
                 'success' => false,
                 'error' => 'Holiday not found'
@@ -181,21 +216,18 @@ class HolidayController extends Controller
     }
 
     /**
-     * Update the specified holiday (using composite key)
+     * Update the specified holiday
      */
-    public function update(Request $request)
+    public function update(Request $request, Holiday $holiday)
     {
-        // Find holiday by composite key
-        $oldType = $request->old_type ?? $request->type;
-        $oldMonth = $request->old_month ?? $request->month;
-        $oldDay = $request->old_day ?? $request->day;
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
 
-        $holiday = Holiday::where('type', $oldType)
-            ->where('month', $oldMonth)
-            ->where('day', $oldDay)
-            ->first();
-
-        if (!$holiday) {
+        // Ensure holiday belongs to the salon
+        if ($holiday->salon_id !== $salonId) {
             return response()->json([
                 'success' => false,
                 'error' => 'Holiday not found'
@@ -203,16 +235,16 @@ class HolidayController extends Controller
         }
 
         Log::info('Holiday update attempt', [
-            'old_key' => [$oldType, $oldMonth, $oldDay],
+            'holiday_id' => $holiday->id,
+            'salon_id' => $salonId,
             'user_id' => auth()->id(),
             'request_data' => $request->all()
         ]);
 
         $validator = Validator::make($request->all(), [
             'name' => 'string|max:255',
-            'month' => 'integer|min:1|max:12',
-            'day' => 'integer|min:1|max:31',
-            'type' => 'in:standard,custom'
+            'date' => 'date',
+            'type' => 'in:NATIONAL,CUSTOM'
         ]);
 
         if ($validator->fails()) {
@@ -223,30 +255,52 @@ class HolidayController extends Controller
         }
 
         try {
-            // Delete old record and create new one (since primary key might change)
-            $holiday->delete();
+            $updateData = [];
             
-            $newHoliday = Holiday::create([
-                'type' => $request->type ?? $oldType,
-                'name' => $request->name ?? $holiday->name,
-                'month' => $request->month ?? $oldMonth,
-                'day' => $request->day ?? $oldDay
-            ]);
+            if ($request->has('name')) {
+                $updateData['name'] = $request->name;
+            }
+            
+            if ($request->has('date')) {
+                $date = Carbon::parse($request->date);
+                
+                // Check if another holiday exists for this date (excluding current)
+                $existing = Holiday::where('salon_id', $salonId)
+                    ->where('date', $date->format('Y-m-d'))
+                    ->where('id', '!=', $holiday->id)
+                    ->first();
+                    
+                if ($existing) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Another holiday already exists for this date'
+                    ], 422);
+                }
+                
+                $updateData['date'] = $date;
+            }
+            
+            if ($request->has('type')) {
+                $updateData['type'] = $request->type;
+            }
+            
+            $holiday->update($updateData);
 
             Log::info('Holiday updated successfully', [
-                'old_key' => [$oldType, $oldMonth, $oldDay],
-                'new_key' => [$newHoliday->type, $newHoliday->month, $newHoliday->day],
+                'holiday_id' => $holiday->id,
+                'salon_id' => $salonId,
                 'user_id' => auth()->id()
             ]);
 
             return response()->json([
                 'success' => true,
-                'data' => $newHoliday
+                'data' => $holiday->fresh()
             ]);
 
         } catch (\Exception $e) {
             Log::error('Failed to update holiday', [
-                'old_key' => [$oldType, $oldMonth, $oldDay],
+                'holiday_id' => $holiday->id,
+                'salon_id' => $salonId,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()
             ]);
@@ -259,16 +313,18 @@ class HolidayController extends Controller
     }
 
     /**
-     * Remove the specified holiday (using composite key)
+     * Remove the specified holiday
      */
-    public function destroy(Request $request)
+    public function destroy(Request $request, Holiday $holiday)
     {
-        $holiday = Holiday::where('type', $request->type)
-            ->where('month', $request->month)
-            ->where('day', $request->day)
-            ->first();
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
 
-        if (!$holiday) {
+        // Ensure holiday belongs to the salon
+        if ($holiday->salon_id !== $salonId) {
             return response()->json([
                 'success' => false,
                 'error' => 'Holiday not found'
@@ -276,7 +332,8 @@ class HolidayController extends Controller
         }
 
         Log::info('Holiday deletion attempt', [
-            'holiday_key' => [$request->type, $request->month, $request->day],
+            'holiday_id' => $holiday->id,
+            'salon_id' => $salonId,
             'user_id' => auth()->id()
         ]);
 
@@ -284,7 +341,8 @@ class HolidayController extends Controller
             $holiday->delete();
 
             Log::info('Holiday deleted successfully', [
-                'holiday_key' => [$request->type, $request->month, $request->day],
+                'holiday_id' => $holiday->id,
+                'salon_id' => $salonId,
                 'user_id' => auth()->id()
             ]);
 
@@ -295,7 +353,8 @@ class HolidayController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Failed to delete holiday', [
-                'holiday_key' => [$request->type, $request->month, $request->day],
+                'holiday_id' => $holiday->id,
+                'salon_id' => $salonId,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()
             ]);
@@ -310,17 +369,22 @@ class HolidayController extends Controller
     /**
      * Get holiday settings
      */
-    public function getSettings()
+    public function getSettings(Request $request)
     {
         try {
-            $settings = HolidaySetting::first();
-            
-            if (!$settings) {
-                // Create default settings
-                $settings = HolidaySetting::create([
-                    'holiday_system_type' => 'standard'
-                ]);
+            // Get salon context and validate access
+            [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+            if ($errorResponse) {
+                return $errorResponse;
             }
+
+            $settings = HolidaySetting::current($salonId);
+
+            Log::info('Holiday settings retrieved', [
+                'salon_id' => $salonId,
+                'user_id' => auth()->id(),
+                'settings_id' => $settings->id
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -345,11 +409,26 @@ class HolidayController extends Controller
      */
     public function updateSettings(Request $request)
     {
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         $validator = Validator::make($request->all(), [
-            'holiday_system_type' => 'required|in:standard,custom'
+            'holiday_system_type' => 'required|in:standard,custom',
+            'use_moroccan_holidays' => 'boolean',
+            'auto_import_holidays' => 'boolean',
+            'custom_holiday_rules' => 'nullable|array'
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Holiday settings validation failed', [
+                'salon_id' => $salonId,
+                'user_id' => auth()->id(),
+                'errors' => $validator->errors()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'errors' => $validator->errors()
@@ -357,13 +436,21 @@ class HolidayController extends Controller
         }
 
         try {
-            $settings = HolidaySetting::first();
-            
-            if (!$settings) {
-                $settings = HolidaySetting::create($request->only(['holiday_system_type']));
-            } else {
-                $settings->update($request->only(['holiday_system_type']));
-            }
+            $updateData = $request->only([
+                'holiday_system_type', 
+                'use_moroccan_holidays', 
+                'auto_import_holidays', 
+                'custom_holiday_rules'
+            ]);
+
+            $settings = HolidaySetting::updateCurrent($salonId, $updateData);
+
+            Log::info('Holiday settings updated successfully', [
+                'salon_id' => $salonId,
+                'user_id' => auth()->id(),
+                'settings_id' => $settings->id,
+                'updated_fields' => array_keys($updateData)
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -372,6 +459,7 @@ class HolidayController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Failed to update holiday settings', [
+                'salon_id' => $salonId,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()
             ]);
@@ -393,7 +481,15 @@ class HolidayController extends Controller
             'year' => $request->year ?? 'current'
         ]);
 
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         try {
+            $year = $request->year ?? now()->year;
+            
             // Standard Moroccan holidays (recurring yearly)
             $moroccanHolidays = [
                 ['name' => 'Jour de l\'An', 'month' => 1, 'day' => 1],
@@ -409,33 +505,34 @@ class HolidayController extends Controller
             $updated = 0;
 
             foreach ($moroccanHolidays as $holidayData) {
-                $existing = Holiday::where('type', 'standard')
-                    ->where('month', $holidayData['month'])
-                    ->where('day', $holidayData['day'])
+                $date = Carbon::create($year, $holidayData['month'], $holidayData['day']);
+                
+                $existing = Holiday::where('salon_id', $salonId)
+                    ->where('date', $date->format('Y-m-d'))
                     ->first();
 
-                                 if ($existing) {
-                     // Delete and recreate since we can't update primary key
-                     $existing->delete();
-                     Holiday::create([
-                         'type' => 'standard',
-                         'name' => $holidayData['name'],
-                         'month' => $holidayData['month'],
-                         'day' => $holidayData['day']
-                     ]);
-                     $updated++;
-                 } else {
-                     Holiday::create([
-                         'type' => 'standard',
-                         'name' => $holidayData['name'],
-                         'month' => $holidayData['month'],
-                         'day' => $holidayData['day']
-                     ]);
-                     $imported++;
-                 }
+                if ($existing) {
+                    // Update existing holiday
+                    $existing->update([
+                        'name' => $holidayData['name'],
+                        'type' => 'NATIONAL'
+                    ]);
+                    $updated++;
+                } else {
+                    // Create new holiday
+                    Holiday::create([
+                        'salon_id' => $salonId,
+                        'type' => 'NATIONAL',
+                        'name' => $holidayData['name'],
+                        'date' => $date
+                    ]);
+                    $imported++;
+                }
             }
 
             Log::info('Moroccan holidays imported successfully', [
+                'salon_id' => $salonId,
+                'year' => $year,
                 'imported' => $imported,
                 'updated' => $updated,
                 'user_id' => auth()->id()
@@ -444,6 +541,7 @@ class HolidayController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
+                    'year' => $year,
                     'imported' => $imported,
                     'updated' => $updated,
                     'total' => $imported + $updated
@@ -452,6 +550,7 @@ class HolidayController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Failed to import Moroccan holidays', [
+                'salon_id' => $salonId,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()
             ]);
@@ -468,12 +567,16 @@ class HolidayController extends Controller
      */
     public function bulkAction(Request $request)
     {
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         $validator = Validator::make($request->all(), [
             'action' => 'required|in:delete',
-            'holidays' => 'required|array|min:1',
-            'holidays.*.type' => 'required|in:standard,custom',
-            'holidays.*.month' => 'required|integer|min:1|max:12',
-            'holidays.*.day' => 'required|integer|min:1|max:31'
+            'holiday_ids' => 'required|array|min:1',
+            'holiday_ids.*' => 'integer|exists:holidays,id'
         ]);
 
         if ($validator->fails()) {
@@ -487,14 +590,18 @@ class HolidayController extends Controller
             $affected = 0;
 
             if ($request->action === 'delete') {
-                foreach ($request->holidays as $holidayData) {
-                    $deleted = Holiday::where('type', $holidayData['type'])
-                        ->where('month', $holidayData['month'])
-                        ->where('day', $holidayData['day'])
-                        ->delete();
-                    $affected += $deleted;
-                }
+                // Only delete holidays that belong to this salon
+                $affected = Holiday::where('salon_id', $salonId)
+                    ->whereIn('id', $request->holiday_ids)
+                    ->delete();
             }
+
+            Log::info('Bulk action completed successfully', [
+                'salon_id' => $salonId,
+                'action' => $request->action,
+                'affected' => $affected,
+                'user_id' => auth()->id()
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -506,6 +613,7 @@ class HolidayController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Bulk action failed', [
+                'salon_id' => $salonId,
                 'action' => $request->action,
                 'error' => $e->getMessage(),
                 'user_id' => auth()->id()

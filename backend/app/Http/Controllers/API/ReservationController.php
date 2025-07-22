@@ -183,6 +183,42 @@ class ReservationController extends BaseController
             DB::beginTransaction();
             
             $service = Service::findOrFail($request->service_id);
+            $salonId = $service->salon_id; // Get salon ID from the service
+            
+            // For owners, validate they can access this salon
+            if ($user->role === 'OWNER') {
+                $userSalon = $user->salon;
+                if (!$userSalon || $userSalon->id !== $salonId) {
+                    Log::warning('Owner attempted to create reservation for different salon', [
+                        'user_id' => $user->id,
+                        'user_salon_id' => $userSalon ? $userSalon->id : null,
+                        'requested_service_salon_id' => $salonId
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Service not found or access denied'
+                    ], 403);
+                }
+            }
+            
+            // If employee is specified, validate they belong to the same salon
+            if ($request->employee_id) {
+                $employee = \App\Models\Employee::findOrFail($request->employee_id);
+                if ($employee->salon_id !== $salonId) {
+                    Log::warning('Employee does not belong to service salon', [
+                        'employee_id' => $request->employee_id,
+                        'employee_salon_id' => $employee->salon_id,
+                        'service_salon_id' => $salonId
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Employee not available for this service'
+                    ], 422);
+                }
+            }
+            
             $startAt = Carbon::parse($request->start_at);
             $endAt = $startAt->copy()->addMinutes($service->duration_min);
             
@@ -198,8 +234,24 @@ class ReservationController extends BaseController
                 if (!$employeeId) {
                     Log::warning('No available employee found for auto-assignment', [
                         'service_id' => $request->service_id,
+                        'salon_id' => $salonId,
                         'start_at' => $startAt->toISOString(),
                         'user_id' => auth()->id()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'No available employee for this time slot'
+                    ], 409);
+                }
+                
+                // Validate that auto-assigned employee belongs to the same salon
+                $employee = \App\Models\Employee::find($employeeId);
+                if (!$employee || $employee->salon_id !== $salonId) {
+                    Log::error('Auto-assigned employee does not belong to service salon', [
+                        'employee_id' => $employeeId,
+                        'employee_salon_id' => $employee ? $employee->salon_id : null,
+                        'service_salon_id' => $salonId
                     ]);
                     
                     return response()->json([
@@ -213,6 +265,7 @@ class ReservationController extends BaseController
             if (!$this->availabilityService->isSlotAvailable($employeeId, $startAt, $service->duration_min)) {
                 Log::warning('Reservation conflict detected during creation', [
                     'employee_id' => $employeeId,
+                    'salon_id' => $salonId,
                     'start_at' => $startAt->toISOString(),
                     'client_id' => auth()->id(),
                     'service_id' => $request->service_id
@@ -224,8 +277,9 @@ class ReservationController extends BaseController
                 ], 409);
             }
             
-            // Create the reservation
+            // Create the reservation with proper salon isolation
             $reservationData = [
+                'salon_id' => $salonId, // Essential for proper isolation
                 'employee_id' => $employeeId,
                 'service_id' => $request->service_id,
                 'start_at' => $startAt,
@@ -252,16 +306,18 @@ class ReservationController extends BaseController
             DB::commit();
             
             // Load relationships for response
-            $reservation->load(['service', 'employee', 'client']);
+            $reservation->load(['service', 'employee', 'client', 'salon']);
             
             Log::info('Reservation created successfully', [
                 'reservation_id' => $reservation->id,
+                'salon_id' => $salonId,
                 'client_id' => auth()->id(),
                 'employee_id' => $employeeId,
                 'service_id' => $request->service_id,
                 'start_at' => $startAt->toISOString(),
                 'end_at' => $endAt->toISOString(),
-                'auto_assigned_employee' => !$request->employee_id
+                'auto_assigned_employee' => !$request->employee_id,
+                'is_manual' => $isManual
             ]);
             
             return response()->json([

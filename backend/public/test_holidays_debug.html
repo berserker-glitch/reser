@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Holidays API Debug Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f5f5f5; 
+        }
+        .container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            margin-bottom: 20px; 
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 5px; 
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        pre { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 4px; 
+            overflow-x: auto; 
+            border-left: 4px solid #007bff; 
+        }
+        .log-section { 
+            background: #1e1e1e; 
+            color: #f8f8f2; 
+            padding: 15px; 
+            border-radius: 4px; 
+            font-family: 'Courier New', monospace; 
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .holiday-item { 
+            background: #ffe6e6; 
+            padding: 8px; 
+            margin: 5px 0; 
+            border-radius: 4px; 
+            border-left: 4px solid #ff4444; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Holidays API Debug Test</h1>
+        <p>This tool tests the holidays API with detailed console logging to identify connection issues.</p>
+        
+        <div>
+            <h3>🔧 Test Controls</h3>
+            <button onclick="testBasicConnection()">1. Test Basic Connection</button>
+            <button onclick="testWithoutAuth()">2. Test Without Auth</button>
+            <button onclick="testWithAuth()">3. Test With Auth Token</button>
+            <button onclick="testCalendarAvailability()">4. Test Calendar Availability</button>
+            <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>📊 Results</h3>
+        <div id="results"></div>
+    </div>
+
+    <div class="container">
+        <h3>🔍 Console Logs</h3>
+        <div id="console-logs" class="log-section"></div>
+    </div>
+
+    <script>
+        // Enhanced logging system
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalInfo = console.info;
+        
+        const logs = [];
+        
+        function addLog(level, message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = { level, message, data, timestamp };
+            logs.push(logEntry);
+            
+            // Display in our custom console
+            updateConsoleDisplay();
+            
+            // Still log to actual console
+            const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+            switch(level) {
+                case 'error': originalError(prefix, message, data); break;
+                case 'warn': originalWarn(prefix, message, data); break;
+                case 'info': originalInfo(prefix, message, data); break;
+                default: originalLog(prefix, message, data); break;
+            }
+        }
+        
+        // Override console methods
+        console.log = (message, data) => addLog('log', message, data);
+        console.error = (message, data) => addLog('error', message, data);
+        console.warn = (message, data) => addLog('warn', message, data);
+        console.info = (message, data) => addLog('info', message, data);
+        
+        function updateConsoleDisplay() {
+            const consoleDiv = document.getElementById('console-logs');
+            consoleDiv.innerHTML = logs.map(log => {
+                const dataStr = log.data ? JSON.stringify(log.data, null, 2) : '';
+                const color = {
+                    'error': '#ff6b6b',
+                    'warn': '#ffd93d',
+                    'info': '#74c0fc',
+                    'log': '#51cf66'
+                }[log.level] || '#f8f8f2';
+                
+                return `<div style="color: ${color}; margin-bottom: 5px;">
+                    [${log.timestamp}] <strong>${log.level.toUpperCase()}</strong>: ${log.message}
+                    ${dataStr ? `<pre style="background: #2d2d2d; margin-top: 5px; padding: 8px; border-radius: 3px;">${dataStr}</pre>` : ''}
+                </div>`;
+            }).join('');
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        function clearLogs() {
+            logs.length = 0;
+            updateConsoleDisplay();
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        function updateResults(html) {
+            document.getElementById('results').innerHTML = html;
+        }
+        
+        // API Base URL
+        const API_BASE = 'http://localhost:8000/api';
+        
+        // Get tokens from localStorage (like the real frontend does)
+        function getAuthToken() {
+            const tokens = [
+                localStorage.getItem('admin_token'),
+                localStorage.getItem('access_token'),
+                localStorage.getItem('token'),
+                localStorage.getItem('client_token')
+            ];
+            
+            console.log('🔐 Checking for auth tokens in localStorage:', {
+                admin_token: !!tokens[0],
+                access_token: !!tokens[1],
+                token: !!tokens[2],
+                client_token: !!tokens[3]
+            });
+            
+            return tokens.find(token => token !== null) || null;
+        }
+        
+        // Test 1: Basic Connection Test
+        async function testBasicConnection() {
+            console.log('🌐 Testing basic server connection...');
+            updateResults('<div class="info">Testing basic connection...</div>');
+            
+            try {
+                const response = await fetch('http://localhost:8000', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                console.log('✅ Server connection successful', { 
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+                updateResults('<div class="success">✅ Server is reachable</div>');
+                
+            } catch (error) {
+                console.error('❌ Server connection failed', error);
+                updateResults('<div class="error">❌ Server connection failed: ' + error.message + '</div>');
+            }
+        }
+        
+        // Test 2: Test holidays API without authentication
+        async function testWithoutAuth() {
+            console.log('🚫 Testing holidays API without authentication...');
+            updateResults('<div class="info">Testing without authentication...</div>');
+            
+            const url = `${API_BASE}/holidays?salon_id=1&year=2025`;
+            console.log('📤 Request URL:', url);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                console.log('📥 Response received', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+                const data = await response.json();
+                console.log('📋 Response data:', data);
+                
+                if (response.status === 401) {
+                    updateResults('<div class="warning">⚠️ Authentication required (as expected)</div>');
+                } else if (response.ok) {
+                    updateResults('<div class="success">✅ API works without auth (unexpected but good)</div>');
+                    displayHolidays(data);
+                } else {
+                    updateResults(`<div class="error">❌ Unexpected error: ${response.status}</div>`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Request failed', error);
+                updateResults('<div class="error">❌ Request failed: ' + error.message + '</div>');
+            }
+        }
+        
+        // Test 3: Test holidays API with authentication
+        async function testWithAuth() {
+            console.log('🔐 Testing holidays API with authentication...');
+            updateResults('<div class="info">Testing with authentication...</div>');
+            
+            const token = getAuthToken();
+            
+            if (!token) {
+                console.error('❌ No auth token found in localStorage');
+                updateResults('<div class="error">❌ No authentication token found in localStorage</div>');
+                return;
+            }
+            
+            console.log('🎫 Using auth token:', token.substring(0, 20) + '...');
+            
+            const url = `${API_BASE}/holidays?salon_id=1&year=2025`;
+            console.log('📤 Request URL:', url);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                console.log('📥 Response received', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+                const data = await response.json();
+                console.log('📋 Response data:', data);
+                
+                if (response.ok) {
+                    console.log('✅ API call successful!');
+                    updateResults('<div class="success">✅ API call successful with authentication!</div>');
+                    displayHolidays(data);
+                } else {
+                    console.error('❌ API call failed', { status: response.status, data });
+                    updateResults(`<div class="error">❌ API call failed: ${response.status} - ${JSON.stringify(data)}</div>`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Request failed', error);
+                updateResults('<div class="error">❌ Request failed: ' + error.message + '</div>');
+            }
+        }
+        
+        // Test 4: Test calendar availability API
+        async function testCalendarAvailability() {
+            console.log('📅 Testing calendar availability API...');
+            updateResults('<div class="info">Testing calendar availability...</div>');
+            
+            const token = getAuthToken();
+            const url = `${API_BASE}/calendar-availability?salon_id=1&start_date=2025-01-01&end_date=2025-01-31`;
+            console.log('📤 Request URL:', url);
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+                console.log('🎫 Using auth token for calendar availability');
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers
+                });
+                
+                console.log('📥 Calendar API response', {
+                    status: response.status,
+                    statusText: response.statusText
+                });
+                
+                const data = await response.json();
+                console.log('📋 Calendar API data:', data);
+                
+                if (response.ok && data.success) {
+                    console.log('✅ Calendar API successful!');
+                    updateResults('<div class="success">✅ Calendar API successful!</div>');
+                    displayCalendarData(data.data);
+                } else {
+                    console.error('❌ Calendar API failed', data);
+                    updateResults(`<div class="error">❌ Calendar API failed: ${JSON.stringify(data)}</div>`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Calendar API request failed', error);
+                updateResults('<div class="error">❌ Calendar API failed: ' + error.message + '</div>');
+            }
+        }
+        
+        // Display holidays data
+        function displayHolidays(apiResponse) {
+            console.log('🎄 Processing holidays data...', apiResponse);
+            
+            let holidays = [];
+            
+            // Handle different response formats
+            if (apiResponse && apiResponse.success && apiResponse.data) {
+                holidays = apiResponse.data;
+            } else if (Array.isArray(apiResponse)) {
+                holidays = apiResponse;
+            } else {
+                console.warn('⚠️ Unexpected holidays data format', apiResponse);
+                return;
+            }
+            
+            console.log('📅 Found holidays:', holidays.length);
+            
+            if (holidays.length === 0) {
+                updateResults(document.getElementById('results').innerHTML + '<div class="warning">⚠️ No holidays found in response</div>');
+                return;
+            }
+            
+            const holidaysHtml = holidays.map(holiday => `
+                <div class="holiday-item">
+                    <strong>🔴 ${holiday.date}</strong>: ${holiday.name} 
+                    <small>(${holiday.type})</small>
+                </div>
+            `).join('');
+            
+            updateResults(document.getElementById('results').innerHTML + 
+                `<div class="success">Found ${holidays.length} holidays:</div>${holidaysHtml}`);
+        }
+        
+        // Display calendar data
+        function displayCalendarData(calendarData) {
+            console.log('📅 Processing calendar data...', calendarData.length + ' days');
+            
+            const holidayDays = calendarData.filter(day => day.is_holiday);
+            console.log('🔴 Holiday days found:', holidayDays.length);
+            
+            if (holidayDays.length > 0) {
+                const holidaysHtml = holidayDays.map(day => `
+                    <div class="holiday-item">
+                        <strong>🔴 ${day.date}</strong>: ${day.holiday_name} 
+                        <small>(bookable: ${day.is_bookable})</small>
+                    </div>
+                `).join('');
+                
+                updateResults(document.getElementById('results').innerHTML + 
+                    `<div class="success">Calendar: Found ${holidayDays.length} holiday days:</div>${holidaysHtml}`);
+            } else {
+                updateResults(document.getElementById('results').innerHTML + 
+                    '<div class="warning">⚠️ No holidays found in calendar data</div>');
+            }
+        }
+        
+        // Initialize
+        console.log('🚀 Holidays API Debug Tool Initialized');
+        console.log('💡 Click the buttons above to run tests');
+        console.log('🔍 Watch this console area for detailed logs');
+        
+        // Check localStorage on load
+        setTimeout(() => {
+            console.log('🗂️ Current localStorage contents:');
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                const preview = value ? (value.length > 50 ? value.substring(0, 50) + '...' : value) : 'null';
+                console.log(`  ${key}: ${preview}`);
+            }
+        }, 500);
+    </script>
+</body>
+</html> 

@@ -96,6 +96,12 @@ class EmployeeController extends BaseController
             'request_data' => $request->except(['password'])
         ]);
 
+        // Get salon context and validate access
+        [$salonId, $errorResponse] = $this->getSalonOrFail($request);
+        if ($errorResponse) {
+            return $errorResponse;
+        }
+
         // Validate request data
         $validator = Validator::make($request->all(), [
             'full_name' => 'required|string|max:120',
@@ -108,6 +114,7 @@ class EmployeeController extends BaseController
         if ($validator->fails()) {
             Log::warning('Employee creation validation failed', [
                 'user_id' => auth()->id(),
+                'salon_id' => $salonId,
                 'errors' => $validator->errors(),
                 'request_data' => $request->all()
             ]);
@@ -122,17 +129,28 @@ class EmployeeController extends BaseController
         try {
             DB::beginTransaction();
             
-            // Create the employee
+            // Create the employee with proper salon isolation
             $employee = Employee::create([
+                'salon_id' => $salonId,
                 'user_id' => auth()->id(), // Associate with the owner creating it
                 'full_name' => $request->full_name,
                 'phone' => $request->phone,
                 'note' => $request->note
             ]);
             
-            // Attach services if provided
+            // Attach services if provided (ensure services belong to the same salon)
             if ($request->has('service_ids') && is_array($request->service_ids)) {
-                $employee->services()->attach($request->service_ids);
+                // Validate that all services belong to the same salon
+                $validServiceIds = \App\Models\Service::where('salon_id', $salonId)
+                    ->whereIn('id', $request->service_ids)
+                    ->pluck('id')
+                    ->toArray();
+                    
+                if (count($validServiceIds) !== count($request->service_ids)) {
+                    throw new \Exception('Some services do not belong to this salon');
+                }
+                
+                $employee->services()->attach($validServiceIds);
             }
             
             // Clear availability cache since new employee affects availability
@@ -141,11 +159,12 @@ class EmployeeController extends BaseController
             DB::commit();
             
             // Load relationships for response
-            $employee->load(['services', 'user']);
+            $employee->load(['services', 'user', 'salon']);
             
             Log::info('Employee created successfully', [
                 'employee_id' => $employee->id,
                 'employee_name' => $employee->full_name,
+                'salon_id' => $salonId,
                 'user_id' => auth()->id(),
                 'service_count' => $employee->services->count()
             ]);
@@ -161,6 +180,7 @@ class EmployeeController extends BaseController
             
             Log::error('Employee creation failed', [
                 'user_id' => auth()->id(),
+                'salon_id' => $salonId,
                 'request_data' => $request->all(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
