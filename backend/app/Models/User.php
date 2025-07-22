@@ -89,4 +89,58 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Reservation::class, 'client_id');
     }
+
+    /**
+     * Get the salons this user is associated with (as client)
+     */
+    public function salons()
+    {
+        return $this->belongsToMany(Salon::class, 'user_salons')
+                    ->withPivot(['registered_at', 'last_visit', 'status'])
+                    ->withTimestamps();
+    }
+
+    /**
+     * Get active salon associations
+     */
+    public function activeSalons()
+    {
+        return $this->salons()->wherePivot('status', 'ACTIVE');
+    }
+
+    /**
+     * Get the user-salon associations
+     */
+    public function userSalons()
+    {
+        return $this->hasMany(UserSalon::class);
+    }
+
+    /**
+     * Associate user with a salon
+     */
+    public function associateWithSalon(int $salonId): UserSalon
+    {
+        return UserSalon::firstOrCreate(
+            [
+                'user_id' => $this->id,
+                'salon_id' => $salonId,
+            ],
+            [
+                'registered_at' => now(),
+                'status' => 'ACTIVE',
+            ]
+        );
+    }
+
+    /**
+     * Check if user is associated with a salon
+     */
+    public function isAssociatedWithSalon(int $salonId): bool
+    {
+        return $this->userSalons()
+                    ->where('salon_id', $salonId)
+                    ->where('status', 'ACTIVE')
+                    ->exists();
+    }
 }

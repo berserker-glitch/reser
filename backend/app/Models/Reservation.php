@@ -22,9 +22,6 @@ class Reservation extends Model
         'start_at',
         'end_at',
         'status',
-        'type',
-        'client_phone',
-        'client_full_name',
     ];
 
     /**
@@ -37,9 +34,7 @@ class Reservation extends Model
         'end_at' => 'datetime',
     ];
 
-    // Reservation types
-    const TYPE_ONLINE = 'online';
-    const TYPE_MANUAL = 'manual';
+    // Note: Reservation types removed as 'type' column doesn't exist in database
 
     // Status constants
     const STATUS_REQUESTED = 'REQUESTED';
@@ -80,42 +75,26 @@ class Reservation extends Model
     }
 
     /**
-     * Get the client name (either from user or manual entry)
+     * Get the client name from the associated user
      */
     public function getClientNameAttribute()
     {
-        if ($this->type === self::TYPE_MANUAL && $this->attributes['client_full_name']) {
-            return $this->attributes['client_full_name'];
-        }
-        
         return $this->client ? $this->client->full_name : 'Client inconnu';
     }
 
     /**
-     * Get the client phone (either from user or manual entry)
+     * Get the client phone from the associated user
      */
     public function getClientPhoneAttribute()
     {
-        if ($this->type === self::TYPE_MANUAL && $this->attributes['client_phone']) {
-            return $this->attributes['client_phone'];
-        }
-        
         return $this->client ? $this->client->phone : null;
     }
 
     /**
-     * Scope for manual reservations
-     */
-    public function scopeManual($query)
-    {
-        return $query->where('type', self::TYPE_MANUAL);
-    }
-
-    /**
-     * Scope for online reservations
+     * Scope for online reservations (all reservations are now online with registered clients)
      */
     public function scopeOnline($query)
     {
-        return $query->where('type', self::TYPE_ONLINE);
+        return $query->whereNotNull('client_id');
     }
 }

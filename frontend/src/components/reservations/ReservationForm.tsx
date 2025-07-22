@@ -15,25 +15,47 @@ import {
   CircularProgress,
   Typography,
   Divider,
-  Grid,
-  FormHelperText,
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fr } from 'date-fns/locale';
+import { format, parseISO, addDays } from 'date-fns';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useQuery } from '@tanstack/react-query';
-import type { Reservation, Service, Employee } from '../../types';
+// API utility for this component
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+const makeApiCall = async (endpoint: string, params?: Record<string, any>) => {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('access_token');
+  const url = new URL(`${API_BASE_URL}${endpoint}`);
+  
+  if (params) {
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+  }
+  
+  const response = await fetch(url.toString(), {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  return response.json();
+};
 
 interface ReservationFormProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: ManualReservationData) => void;
   isLoading?: boolean;
-  reservation?: Reservation | null; // For editing
+  reservation?: any | null; // For editing
   title?: string;
 }
 
@@ -43,180 +65,194 @@ interface ManualReservationData {
   service_id: number;
   employee_id: number;
   start_at: Date;
-  type: 'manual';
+  notes?: string;
 }
 
-// Validation schema
-const schema = yup.object({
-  client_full_name: yup
-    .string()
-    .required('Le nom complet est obligatoire')
-    .min(2, 'Le nom doit contenir au moins 2 caractères')
-    .max(120, 'Le nom ne peut pas dépasser 120 caractères'),
-  client_phone: yup
-    .string()
-    .required('Le numéro de téléphone est obligatoire')
-    .matches(
-      /^(\+212|0)([ \-_/]*)(\d[ \-_/]*){8,9}$/,
-      'Format de téléphone invalide (ex: +212 6 12 34 56 78 ou 06 12 34 56 78)'
-    ),
-  service_id: yup
-    .number()
-    .required('Veuillez sélectionner un service')
-    .positive('Veuillez sélectionner un service'),
-  employee_id: yup
-    .number()
-    .required('Veuillez sélectionner un employé')
-    .positive('Veuillez sélectionner un employé'),
-  start_at: yup
-    .date()
-    .required('Veuillez sélectionner une date et heure')
-    .min(new Date(), 'La date ne peut pas être dans le passé'),
-  type: yup.string().oneOf(['manual']).required(),
+interface FormData {
+  client_full_name: string;
+  client_phone: string;
+  service_id: number;
+  employee_id: number;
+  selected_date: Date;
+  selected_time_slot: string;
+  notes: string;
+}
+
+interface Service {
+  id: number;
+  name: string;
+  duration_min: number;
+  price_dhs: number;
+  description?: string;
+}
+
+interface Employee {
+  id: number;
+  full_name: string;
+}
+
+interface TimeSlot {
+  start_at: string;
+  end_at: string;
+  available: boolean;
+}
+
+// Validation schema for internal form
+const formSchema = yup.object({
+  client_full_name: yup.string().required('Le nom complet est requis').min(2, 'Minimum 2 caractères'),
+  client_phone: yup.string().required('Le numéro de téléphone est requis'),
+  service_id: yup.number().required('Veuillez sélectionner un service'),
+  employee_id: yup.number().required('Veuillez sélectionner un employé'),
+  selected_date: yup.date().nullable().required('Veuillez sélectionner une date'),
+  selected_time_slot: yup.string().required('Veuillez sélectionner un créneau horaire'),
+  notes: yup.string().default(''),
 });
 
-/**
- * ReservationForm Component
- * 
- * Form for creating manual reservations (admin creates for clients)
- * Features:
- * - Client information (name, phone)
- * - Service selection
- * - Employee selection
- * - Date/time selection
- * - Validation
- */
 const ReservationForm: React.FC<ReservationFormProps> = ({
   open,
   onClose,
   onSubmit,
   isLoading = false,
   reservation = null,
-  title = 'Nouvelle réservation manuelle',
+  title = 'Nouvelle réservation manuelle'
 }) => {
-  const isEdit = Boolean(reservation);
-
-  // Fetch services
-  const { data: servicesData, isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'],
-    queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/services-list`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
-          'Accept': 'application/json',
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch services');
-      const data = await response.json();
-      return data;
-    },
-    enabled: open,
-  });
-
-  // Fetch employees
-  const { data: employeesData, isLoading: employeesLoading } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/employees`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
-          'Accept': 'application/json',
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch employees');
-      const data = await response.json();
-      return data;
-    },
-    enabled: open,
-  });
-
-  const services = Array.isArray(servicesData?.data?.data) ? servicesData.data.data : 
-                  Array.isArray(servicesData?.data) ? servicesData.data : 
-                  Array.isArray(servicesData) ? servicesData : [];
-
-  const employees = Array.isArray(employeesData?.data?.data) ? employeesData.data.data : 
-                   Array.isArray(employeesData?.data) ? employeesData.data : 
-                   Array.isArray(employeesData) ? employeesData : [];
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const {
     control,
     handleSubmit,
-    reset,
     watch,
-    formState: { errors, isValid },
-  } = useForm<ManualReservationData>({
-    resolver: yupResolver(schema),
+    reset,
+    setValue,
+    formState: { errors }
+  } = useForm<FormData>({
+    resolver: yupResolver(formSchema),
     defaultValues: {
       client_full_name: '',
       client_phone: '',
       service_id: 0,
       employee_id: 0,
-      start_at: new Date(),
-      type: 'manual',
-    },
-    mode: 'onChange',
+      selected_date: null,
+      selected_time_slot: '',
+      notes: '',
+    }
   });
 
+  // Watch for changes to trigger slot fetching
   const selectedServiceId = watch('service_id');
-  const selectedService = services.find((s: Service) => s.id === selectedServiceId);
+  const selectedEmployeeId = watch('employee_id');
+  const selectedDate = watch('selected_date');
 
-  // Reset form when opening/closing or editing
-  useEffect(() => {
-    if (open) {
-      if (isEdit && reservation) {
-        reset({
-          client_full_name: reservation.client_full_name || '',
-          client_phone: reservation.client_phone || '',
-          service_id: reservation.service_id,
-          employee_id: reservation.employee_id,
-          start_at: new Date(reservation.start_at),
-          type: 'manual',
-        });
-      } else {
-        reset({
-          client_full_name: '',
-          client_phone: '',
-          service_id: 0,
-          employee_id: 0,
-          start_at: new Date(),
-          type: 'manual',
-        });
-      }
+  // Fetch services
+  const { data: services = [], isLoading: servicesLoading } = useQuery<Service[]>({
+    queryKey: ['admin-services'],
+    queryFn: async () => {
+      const response = await makeApiCall('/admin/services');
+      return response.data || [];
     }
-  }, [open, isEdit, reservation, reset]);
+  });
 
-  const handleFormSubmit = (data: ManualReservationData) => {
-    onSubmit(data);
+  // Fetch employees
+  const { data: employees = [], isLoading: employeesLoading } = useQuery<Employee[]>({
+    queryKey: ['admin-employees'],
+    queryFn: async () => {
+      const response = await makeApiCall('/admin/employees');
+      return response.data || [];
+    }
+  });
+
+  // Fetch available time slots when service, employee, or date changes
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      if (!selectedServiceId || !selectedEmployeeId || !selectedDate) {
+        setAvailableSlots([]);
+        return;
+      }
+
+      setLoadingSlots(true);
+      try {
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        const response = await makeApiCall('/availability', {
+          service_id: selectedServiceId,
+          employee_id: selectedEmployeeId,
+          date: dateStr
+        });
+
+        if (response.data.success) {
+          setAvailableSlots(response.data.data.slots || []);
+        } else {
+          setAvailableSlots([]);
+        }
+      } catch (error) {
+        console.error('Error fetching available slots:', error);
+        setAvailableSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [selectedServiceId, selectedEmployeeId, selectedDate]);
+
+  // Reset time slot when dependencies change
+  useEffect(() => {
+    setValue('selected_time_slot', '');
+  }, [selectedServiceId, selectedEmployeeId, selectedDate, setValue]);
+
+  // Initialize form when editing
+  useEffect(() => {
+    if (reservation && open) {
+      reset({
+        client_full_name: reservation.client_full_name || '',
+        client_phone: reservation.client_phone || '',
+        service_id: reservation.service_id || 0,
+        employee_id: reservation.employee_id || 0,
+        selected_date: reservation.start_at ? parseISO(reservation.start_at) : null,
+        selected_time_slot: reservation.start_at ? reservation.start_at : '',
+        notes: reservation.notes || '',
+      });
+    } else if (open) {
+      reset({
+        client_full_name: '',
+        client_phone: '',
+        service_id: 0,
+        employee_id: 0,
+        selected_date: addDays(new Date(), 1), // Default to tomorrow
+        selected_time_slot: '',
+        notes: '',
+      });
+    }
+  }, [reservation, open, reset]);
+
+  // Handle form submission
+  const handleFormSubmit = (data: FormData) => {
+    if (!data.selected_time_slot || !data.selected_date) {
+      return;
+    }
+
+    // Convert form data to ManualReservationData
+    const reservationData: ManualReservationData = {
+      client_full_name: data.client_full_name,
+      client_phone: data.client_phone,
+      service_id: data.service_id,
+      employee_id: data.employee_id,
+      start_at: parseISO(data.selected_time_slot),
+      notes: data.notes || undefined,
+    };
+
+    onSubmit(reservationData);
   };
 
-  const handleCancel = () => {
-    reset();
-    onClose();
-  };
-
-  const isFormLoading = servicesLoading || employeesLoading || isLoading;
+  const selectedService = services.find(s => s.id === selectedServiceId);
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleCancel} 
-      maxWidth="md" 
-      fullWidth
-      disableEscapeKeyDown={isLoading}
-    >
-      <DialogTitle>
-        <Typography variant="h6" component="div">
-          {title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Créer une réservation au nom d'un client
-        </Typography>
-      </DialogTitle>
-
-      <DialogContent dividers>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>
-          {isFormLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          {servicesLoading || employeesLoading ? (
+            <Box display="flex" justifyContent="center" p={3}>
               <CircularProgress />
             </Box>
           ) : (
@@ -226,43 +262,39 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
                 Informations du client
               </Typography>
               
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="client_full_name"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        label="Nom complet du client"
-                        fullWidth
-                        error={!!errors.client_full_name}
-                        helperText={errors.client_full_name?.message}
-                        disabled={isLoading}
-                        placeholder="Ex: Mohammed Alami"
-                      />
-                    )}
-                  />
-                </Grid>
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Controller
+                  name="client_full_name"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Nom complet du client"
+                      fullWidth
+                      error={!!errors.client_full_name}
+                      helperText={errors.client_full_name?.message}
+                      disabled={isLoading}
+                      placeholder="Ex: Mohammed Alami"
+                    />
+                  )}
+                />
 
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="client_phone"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        label="Numéro de téléphone"
-                        fullWidth
-                        error={!!errors.client_phone}
-                        helperText={errors.client_phone?.message}
-                        disabled={isLoading}
-                        placeholder="Ex: +212 6 12 34 56 78"
-                      />
-                    )}
-                  />
-                </Grid>
-              </Grid>
+                <Controller
+                  name="client_phone"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Numéro de téléphone"
+                      fullWidth
+                      error={!!errors.client_phone}
+                      helperText={errors.client_phone?.message}
+                      disabled={isLoading}
+                      placeholder="Ex: 0612345678"
+                    />
+                  )}
+                />
+              </Box>
 
               <Divider sx={{ my: 3 }} />
 
@@ -271,88 +303,122 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
                 Détails de la réservation
               </Typography>
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="service_id"
-                    control={control}
-                    render={({ field }) => (
-                      <FormControl fullWidth error={!!errors.service_id}>
-                        <InputLabel>Service</InputLabel>
-                        <Select
-                          {...field}
-                          label="Service"
-                          disabled={isLoading}
-                        >
-                          <MenuItem value={0}>
-                            <em>Sélectionnez un service</em>
-                          </MenuItem>
-                          {services.map((service: Service) => (
-                            <MenuItem key={service.id} value={service.id}>
-                              {service.name} - {service.duration_min} min - {service.price_dhs} DH
-                            </MenuItem>
-                          ))}
-                        </Select>
-                        {errors.service_id && (
-                          <FormHelperText>{errors.service_id.message}</FormHelperText>
-                        )}
-                      </FormControl>
-                    )}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="employee_id"
-                    control={control}
-                    render={({ field }) => (
-                      <FormControl fullWidth error={!!errors.employee_id}>
-                        <InputLabel>Employé</InputLabel>
-                        <Select
-                          {...field}
-                          label="Employé"
-                          disabled={isLoading}
-                        >
-                          <MenuItem value={0}>
-                            <em>Sélectionnez un employé</em>
-                          </MenuItem>
-                          {employees.map((employee: Employee) => (
-                            <MenuItem key={employee.id} value={employee.id}>
-                              {employee.full_name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                        {errors.employee_id && (
-                          <FormHelperText>{errors.employee_id.message}</FormHelperText>
-                        )}
-                      </FormControl>
-                    )}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Controller
-                    name="start_at"
-                    control={control}
-                    render={({ field }) => (
-                      <DateTimePicker
-                        label="Date et heure"
-                        value={field.value}
-                        onChange={field.onChange}
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Controller
+                  name="service_id"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.service_id}>
+                      <InputLabel>Service</InputLabel>
+                      <Select
+                        {...field}
+                        label="Service"
                         disabled={isLoading}
-                        minutesStep={30}
-                        slotProps={{
-                          textField: {
-                            fullWidth: true,
-                            error: !!errors.start_at,
-                            helperText: errors.start_at?.message,
-                          },
-                        }}
-                      />
-                    )}
+                      >
+                        <MenuItem value={0}>Sélectionner un service</MenuItem>
+                        {services.map((service) => (
+                          <MenuItem key={service.id} value={service.id}>
+                            {service.name} ({service.duration_min} min - {service.price_dhs} DH)
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                />
+
+                <Controller
+                  name="employee_id"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.employee_id}>
+                      <InputLabel>Employé</InputLabel>
+                      <Select
+                        {...field}
+                        label="Employé"
+                        disabled={isLoading}
+                      >
+                        <MenuItem value={0}>Sélectionner un employé</MenuItem>
+                        {employees.map((employee) => (
+                          <MenuItem key={employee.id} value={employee.id}>
+                            {employee.full_name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                />
+              </Box>
+
+              {/* Date and Time Selection */}
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Controller
+                  name="selected_date"
+                  control={control}
+                  render={({ field }) => (
+                    <DatePicker
+                      label="Date"
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={isLoading}
+                      minDate={new Date()}
+                      slotProps={{
+                        textField: {
+                          fullWidth: true,
+                          error: !!errors.selected_date,
+                          helperText: errors.selected_date?.message,
+                        },
+                      }}
+                    />
+                  )}
+                />
+
+                <Controller
+                  name="selected_time_slot"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.selected_time_slot}>
+                      <InputLabel>Créneau horaire</InputLabel>
+                      <Select
+                        {...field}
+                        label="Créneau horaire"
+                        disabled={isLoading || loadingSlots || !selectedServiceId || !selectedEmployeeId || !selectedDate}
+                      >
+                        <MenuItem value="">
+                          {loadingSlots ? 'Chargement...' : 'Sélectionner un créneau'}
+                        </MenuItem>
+                        {availableSlots.filter(slot => slot.available).map((slot) => (
+                          <MenuItem key={slot.start_at} value={slot.start_at}>
+                            {format(parseISO(slot.start_at), 'HH:mm')} - {format(parseISO(slot.end_at), 'HH:mm')}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {availableSlots.length === 0 && selectedDate && selectedServiceId && selectedEmployeeId && !loadingSlots && (
+                        <Typography variant="caption" color="warning.main" sx={{ mt: 1 }}>
+                          Aucun créneau disponible pour cette date
+                        </Typography>
+                      )}
+                    </FormControl>
+                  )}
+                />
+              </Box>
+
+              {/* Notes */}
+              <Controller
+                name="notes"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Notes (optionnel)"
+                    fullWidth
+                    multiline
+                    rows={3}
+                    disabled={isLoading}
+                    placeholder="Remarques particulières..."
+                    sx={{ mb: 2 }}
                   />
-                </Grid>
-              </Grid>
+                )}
+              />
 
               {/* Service Information */}
               {selectedService && (
@@ -379,16 +445,15 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleCancel} disabled={isLoading}>
+        <Button onClick={onClose} disabled={isLoading}>
           Annuler
         </Button>
         <Button
           onClick={handleSubmit(handleFormSubmit)}
           variant="contained"
-          disabled={!isValid || isLoading || isFormLoading}
-          startIcon={isLoading ? <CircularProgress size={20} /> : null}
+          disabled={isLoading || loadingSlots}
         >
-          {isLoading ? 'Création...' : isEdit ? 'Modifier' : 'Créer la réservation'}
+          {isLoading ? 'Enregistrement...' : (reservation ? 'Modifier' : 'Créer')}
         </Button>
       </DialogActions>
     </Dialog>

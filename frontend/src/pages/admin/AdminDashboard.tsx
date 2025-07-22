@@ -41,10 +41,9 @@ import { fr } from 'date-fns/locale';
 // Configure axios baseURL
 axios.defaults.baseURL = 'http://localhost:8000';
 
-// API functions
+// API functions with improved error handling
 const fetchServices = async () => {
   const token = localStorage.getItem('admin_token') || localStorage.getItem('access_token') || localStorage.getItem('token');
-  console.log('🔍 Debug - Services token found:', token ? 'Yes' : 'No');
   
   if (!token) {
     throw new Error('No authentication token found');
@@ -54,56 +53,71 @@ const fetchServices = async () => {
     const response = await axios.get('/api/admin/services-list', {
       headers: {
         Authorization: `Bearer ${token}`,
+        'Accept': 'application/json',
       },
     });
-    console.log('✅ Services API success:', response.data);
     return response.data;
   } catch (error: any) {
-    console.error('❌ Services API error:', error.response?.status, error.response?.data);
+    // Handle token-related errors
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Clear invalid token and redirect to login
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_user');
+      localStorage.removeItem('admin_salon');
+      window.location.href = '/login';
+      throw new Error('Authentication failed. Please log in again.');
+    }
     throw error;
   }
 };
 
 const fetchReservations = async () => {
   const token = localStorage.getItem('admin_token') || localStorage.getItem('access_token') || localStorage.getItem('token');
-  console.log('🔍 Debug - Token found:', token ? 'Yes' : 'No');
   
   if (!token) {
     throw new Error('No authentication token found');
   }
   
   try {
-    const response = await axios.get('/api/reservations', {
+    const response = await axios.get('/api/admin/reservations', {
       headers: {
         Authorization: `Bearer ${token}`,
+        'Accept': 'application/json',
       },
     });
-    console.log('✅ Reservations API success:', response.data);
     return response.data;
   } catch (error: any) {
-    console.error('❌ Reservations API error:', error.response?.status, error.response?.data);
+    // Let serviceApi interceptor handle auth errors to avoid double redirects
     throw error;
   }
 };
 
 const fetchEmployees = async () => {
   const token = localStorage.getItem('admin_token') || localStorage.getItem('access_token') || localStorage.getItem('token');
-  console.log('🔍 Debug - Employee token found:', token ? 'Yes' : 'No');
   
   if (!token) {
     throw new Error('No authentication token found');
   }
   
   try {
-    const response = await axios.get('/api/employees', {
+    const response = await axios.get('/api/admin/employees', {
       headers: {
         Authorization: `Bearer ${token}`,
+        'Accept': 'application/json',
       },
     });
-    console.log('✅ Employees API success:', response.data);
-    return response.data;
+    
+    // Ensure we return the data in a consistent format
+    const data = response.data;
+    if (data?.success && data?.data) {
+      return data; // API returns { success: true, data: [...] }
+    } else if (Array.isArray(data)) {
+      return { success: true, data: data }; // API returns [...] directly
+    } else {
+      return { success: true, data: data?.data || [] }; // Other formats
+    }
   } catch (error: any) {
-    console.error('❌ Employees API error:', error.response?.status, error.response?.data);
+    // Let serviceApi interceptor handle auth errors to avoid double redirects
     throw error;
   }
 };

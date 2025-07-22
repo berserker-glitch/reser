@@ -14,10 +14,22 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    // Check for client token first, then admin tokens
-    const token = localStorage.getItem('client_token') || 
+    // For admin routes, prioritize admin_token
+    const isAdminRoute = config.url?.includes('/admin/');
+    let token;
+    
+    if (isAdminRoute) {
+      // Admin routes: prioritize admin_token
+      token = localStorage.getItem('admin_token') || 
+              localStorage.getItem('access_token') || 
+              localStorage.getItem('token');
+    } else {
+      // Client routes: prioritize client_token
+      token = localStorage.getItem('client_token') || 
                   localStorage.getItem('access_token') || 
                   localStorage.getItem('admin_token');
+    }
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,17 +44,41 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Clear all possible tokens and user data
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Prevent infinite loops by checking if we're already on a login page
+      const isOnLoginPage = window.location.pathname === '/login' || 
+                           window.location.pathname === '/client/login';
+      
+      if (!isOnLoginPage) {
+        // Determine if this is an admin or client request
+        const isAdminRequest = error.config?.url?.includes('/admin/');
+        const isAdminPath = window.location.pathname.includes('/admin');
+        
+        if (isAdminRequest || isAdminPath) {
+          // Admin authentication failed
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_user');
+          localStorage.removeItem('admin_salon');
+          // Use timeout to prevent multiple simultaneous redirects
+          setTimeout(() => {
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
+          }, 100);
+        } else {
+          // Client authentication failed
       localStorage.removeItem('client_token');
       localStorage.removeItem('access_token');
-      localStorage.removeItem('admin_token');
       localStorage.removeItem('client_user');
-      localStorage.removeItem('admin_user');
-      localStorage.removeItem('admin_salon'); // Clear salon data
-      // Redirect to appropriate login page
       const isClientPath = window.location.pathname.includes('/client');
-      window.location.href = isClientPath ? '/client/login' : '/login';
+          setTimeout(() => {
+            const targetPath = isClientPath ? '/client/login' : '/';
+            if (window.location.pathname !== targetPath) {
+              window.location.href = targetPath;
+            }
+          }, 100);
+        }
+      }
     }
     return Promise.reject(error);
   }

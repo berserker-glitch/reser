@@ -96,8 +96,10 @@ class AvailabilityService
     {
         $weekday = $date->dayOfWeek; // 0 = Sunday, 6 = Saturday
         
-        // Get global working hours for this weekday (no longer employee-specific)
-        $workingHour = WorkingHour::where('weekday', $weekday)->first();
+        // Get working hours for this weekday and salon
+        $workingHour = WorkingHour::where('salon_id', $service->salon_id)
+            ->where('weekday', $weekday)
+            ->first();
             
         if (!$workingHour || !$workingHour->start_time || !$workingHour->end_time) {
             Log::debug('No working hours or non-working day', [
@@ -178,9 +180,11 @@ class AvailabilityService
      * @param int $employeeId
      * @param Carbon $startDateTime
      * @param int $duration
+     * @param int|null $excludeReservationId
+     * @param string|null $excludeType ('regular' or 'manual')
      * @return bool
      */
-    public function isSlotAvailable(int $employeeId, Carbon $startDateTime, int $duration): bool
+    public function isSlotAvailable(int $employeeId, Carbon $startDateTime, int $duration, ?int $excludeReservationId = null, ?string $excludeType = null): bool
     {
         $endDateTime = $startDateTime->copy()->addMinutes($duration);
 
@@ -189,25 +193,49 @@ class AvailabilityService
             'start_at' => $startDateTime->toIso8601String(),
             'end_at' => $endDateTime->toIso8601String(),
             'duration_min' => $duration,
+            'exclude_reservation_id' => $excludeReservationId,
+            'exclude_type' => $excludeType,
         ]);
 
-        // Check for overlapping reservations
-        $query = Reservation::where('employee_id', $employeeId)
+        // Check for overlapping regular reservations
+        $regularQuery = Reservation::where('employee_id', $employeeId)
             ->where('status', '!=', 'CANCELLED')
             ->where(function ($query) use ($startDateTime, $endDateTime) {
                 $query->where('start_at', '<', $endDateTime)
                       ->where('end_at', '>', $startDateTime);
             });
 
-        $conflictingReservations = $query->exists();
+        // Exclude specific reservation if updating
+        if ($excludeReservationId && $excludeType === 'regular') {
+            $regularQuery->where('id', '!=', $excludeReservationId);
+        }
+
+        $hasRegularConflict = $regularQuery->exists();
+
+        // Check for overlapping manual reservations
+        $manualQuery = \App\Models\ManualReservation::where('employee_id', $employeeId)
+            ->where('status', '!=', 'CANCELLED')
+            ->where(function ($query) use ($startDateTime, $endDateTime) {
+                $query->where('start_at', '<', $endDateTime)
+                      ->where('end_at', '>', $startDateTime);
+            });
+
+        // Exclude specific manual reservation if updating
+        if ($excludeReservationId && $excludeType === 'manual') {
+            $manualQuery->where('id', '!=', $excludeReservationId);
+        }
+
+        $hasManualConflict = $manualQuery->exists();
+
+        $conflictFound = $hasRegularConflict || $hasManualConflict;
 
         Log::debug('Conflict check result', [
-            'sql' => $query->toSql(),
-            'bindings' => $query->getBindings(),
-            'conflict_found' => $conflictingReservations,
+            'regular_conflicts' => $hasRegularConflict,
+            'manual_conflicts' => $hasManualConflict,
+            'total_conflict_found' => $conflictFound,
         ]);
 
-        return !$conflictingReservations;
+        return !$conflictFound;
     }
 
     /**

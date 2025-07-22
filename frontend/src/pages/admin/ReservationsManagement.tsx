@@ -263,7 +263,7 @@ function ReservationsManagement() {
   // Mutations
   const createReservationMutation = useMutation({
     mutationFn: async (data: ReservationFormData) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/reservations`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/manual-reservations`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
@@ -296,7 +296,7 @@ function ReservationsManagement() {
 
   const updateReservationMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<ReservationFormData> }) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/reservations/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/manual-reservations/${id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
@@ -329,7 +329,7 @@ function ReservationsManagement() {
 
   const deleteReservationMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/reservations/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/manual-reservations/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,

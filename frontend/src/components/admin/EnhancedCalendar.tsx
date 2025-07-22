@@ -32,16 +32,16 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { getAllHolidays, type Holiday } from '../../services/holidayService';
 import { getAllWorkingHours, isWorkingDay, getEmployeesWorkingOnDay } from '../../services/workingHoursService';
 import { useSalonId } from '../../hooks/useSalonContext';
+import type { Holiday, HolidaySettings } from '../../types';
 
 // Types
 interface DayInfo {
   date: Date;
   reservations: any[];
   employees: any[];
-  holiday?: Holiday;
+  holiday?: any;
   isToday: boolean;
   isNonWorkingDay: boolean; // Changed from isWeekend to isNonWorkingDay
 }
@@ -57,7 +57,7 @@ interface EnhancedCalendarProps {
  * EnhancedCalendar Component
  * 
  * Advanced calendar with:
- * - Moroccan national and Islamic holidays
+ * - Holiday system type filtering (Standard vs Custom)
  * - Day detail popup with reservations and employee info
  * - Holiday indicators and tooltips
  * - Reservation count indicators
@@ -75,21 +75,53 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const salonId = useSalonId();
 
-  // Fetch holidays for current year
-  const { 
-    data: holidays = [], 
-    isLoading: holidaysLoading,
-    error: holidaysError 
-  } = useQuery({
-    queryKey: ['holidays', salonId, currentDate.getFullYear()],
-    queryFn: async () => {
-      console.log('🔍 EnhancedCalendar: Fetching holidays for', { salonId, year: currentDate.getFullYear() });
-      const result = await getAllHolidays(salonId, currentDate.getFullYear());
-      console.log('📅 EnhancedCalendar: Holidays received:', result);
-      return result;
+  // Fetch holiday settings
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['holiday-settings', salonId],
+    queryFn: async (): Promise<HolidaySettings> => {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/holidays/settings`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      const data = await response.json();
+      return data.data;
     },
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours
-    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days (previously cacheTime)
+  });
+
+  // Fetch holidays for current year using the new backend API format
+  const currentYear = currentDate.getFullYear();
+  const { data: holidays = [], isLoading: holidaysLoading } = useQuery({
+    queryKey: ['holidays-multi-year', salonId, currentYear],
+    queryFn: async (): Promise<any[]> => {
+      // Fetch holidays for current year and adjacent years (for cross-month selections)
+      const years = [currentYear - 1, currentYear, currentYear + 1];
+      const responses = await Promise.all(
+        years.map(year => {
+          const url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/admin/holidays?year=${year}&active=true`;
+          return fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('admin_token')}`,
+              'Accept': 'application/json',
+            },
+          });
+        })
+      );
+      
+      const allHolidays: any[] = [];
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        if (response.ok) {
+          const data = await response.json();
+          const yearHolidays = data.data || [];
+          allHolidays.push(...yearHolidays);
+        }
+      }
+      
+      return allHolidays;
+    },
   });
 
   // Fetch working hours for all employees
@@ -104,6 +136,31 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
     gcTime: 1000 * 60 * 60 * 24, // 24 hours
     retry: 2, // Retry failed requests
   });
+
+  // Filter holidays based on current system type (like CalendarManagement.tsx)
+  const getFilteredHolidays = () => {
+    if (!holidays || holidays.length === 0) {
+      return [];
+    }
+    
+    const filteredResult = holidays.filter((holiday: any) => {
+      const systemType = settings?.holiday_system_type;
+      const holidayType = holiday.type;
+      
+      if (systemType === 'standard') {
+        // Backend returns 'NATIONAL' for standard holidays
+        return holidayType === 'NATIONAL';
+      } else if (systemType === 'custom') {
+        // Backend returns 'CUSTOM' for custom holidays
+        return holidayType === 'CUSTOM';
+      }
+      return true; // Show all if no setting
+    });
+    
+    return filteredResult;
+  };
+
+  const filteredHolidays = getFilteredHolidays();
 
   // Generate calendar days with proper alignment
   const calendarGrid = useMemo(() => {
@@ -137,6 +194,12 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
   const getEmployeesForDate = (date: Date | null) => {
     if (!date) return [];
     
+    // Ensure employees is an array
+    if (!Array.isArray(employees)) {
+      console.warn('EnhancedCalendar: employees prop is not an array:', employees);
+      return [];
+    }
+    
     // If working hours failed to load, return all employees as a fallback
     if (workingHoursError || !workingHours || workingHours.length === 0) {
       return employees;
@@ -164,32 +227,17 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
     });
   };
 
-  // Get holiday for a specific date
-  const getHolidayForDate = (date: Date | null): Holiday | undefined => {
+  // Get holiday for a specific date using the filtered holidays
+  const getHolidayForDate = (date: Date | null): any | undefined => {
     if (!date) return undefined;
     
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const foundHoliday = (holidays as Holiday[]).find(h => {
-      // Handle both date formats: "2025-01-01" and "2025-01-01T00:00:00.000000Z"
-      const holidayDateStr = h.id.includes('T') ? h.id.split('T')[0] : h.id;
-      return holidayDateStr === dateStr;
+    return filteredHolidays.find((h: any) => {
+      // Backend returns date as "2025-01-01T00:00:00.000000Z"
+      // We need to compare just the date part
+      if (!h.date) return false;
+      const holidayDate = new Date(h.date);
+      return isSameDay(holidayDate, date);
     });
-    
-    // Debug logging for January 1st specifically
-    if (dateStr === '2025-01-01') {
-      console.log('🔍 Checking holiday for Jan 1st:', {
-        dateStr,
-        availableHolidays: holidays,
-        foundHoliday,
-        holidaysArray: (holidays as Holiday[]).map(h => ({ 
-          id: h.id, 
-          name: h.name, 
-          parsedDate: h.id.includes('T') ? h.id.split('T')[0] : h.id 
-        }))
-      });
-    }
-    
-    return foundHoliday;
   };
 
   // Create day info object
@@ -248,7 +296,10 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
     }
   };
 
-  if (holidaysLoading || workingHoursLoading) {
+  // Show loading state
+  const isLoading = settingsLoading || holidaysLoading || workingHoursLoading;
+
+  if (isLoading) {
     return (
       <Paper sx={{ p: 3, textAlign: 'center' }}>
         <CircularProgress size={24} />
@@ -280,11 +331,6 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
         </Box>
 
         {/* Error Warnings */}
-        {holidaysError && (
-          <Alert severity="warning" sx={{ mb: 2, fontSize: '0.75rem' }}>
-            Impossible de charger les jours fériés
-          </Alert>
-        )}
         {workingHoursError && (
           <Alert severity="info" sx={{ mb: 2, fontSize: '0.75rem' }}>
             Horaires de travail non disponibles - affichage par défaut
@@ -435,7 +481,7 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
                         fontSize: '8px',
                       }}
                     >
-                      {dayInfo.holiday!.type === 'islamic' ? '☪️' : '🇲🇦'}
+                      {dayInfo.holiday!.type === 'custom' ? '🎉' : '🇲🇦'}
                     </Box>
                   )}
                 </Box>
@@ -448,7 +494,7 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
         {!compact && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
             <Chip size="small" label="🇲🇦 Fête nationale" variant="outlined" />
-            <Chip size="small" label="☪️ Fête islamique" variant="outlined" />
+            <Chip size="small" label="🎉 Fête personnalisée" variant="outlined" />
             <Chip size="small" label="📅 Rendez-vous" color="success" variant="outlined" />
           </Box>
         )}
@@ -471,8 +517,8 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
                 </Typography>
                 {selectedDay.holiday && (
                   <Chip 
-                    label={selectedDay.holiday.type === 'islamic' ? 'Fête islamique' : 'Fête nationale'}
-                    color={selectedDay.holiday.type === 'islamic' ? 'secondary' : 'primary'}
+                    label={selectedDay.holiday.type === 'custom' ? 'Jour férié personnalisé' : 'Jour férié officiel'}
+                    color={selectedDay.holiday.type === 'custom' ? 'secondary' : 'primary'}
                     size="small"
                   />
                 )}
@@ -484,17 +530,12 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
               {selectedDay.holiday && (
                 <Alert 
                   severity="info" 
-                  icon={selectedDay.holiday.type === 'islamic' ? '☪️' : '🇲🇦'}
+                  icon={selectedDay.holiday.type === 'custom' ? '🎉' : '🇲🇦'}
                   sx={{ mb: 3 }}
                 >
                   <Typography variant="subtitle2" gutterBottom>
                     {selectedDay.holiday.name}
                   </Typography>
-                  {selectedDay.holiday.description && (
-                    <Typography variant="caption">
-                      {selectedDay.holiday.description}
-                    </Typography>
-                  )}
                 </Alert>
               )}
 
@@ -502,7 +543,7 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
               {selectedDay.holiday ? (
                 <Alert severity="warning" sx={{ mt: 2 }}>
                   <Typography variant="body2">
-                    Ceci est un jour férié. Aucune activité n'est prévue.
+                    Ceci est un jour férié. Aucune activité commerciale n'est prévue.
                   </Typography>
                 </Alert>
               ) : (
@@ -536,7 +577,9 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({
                             primary={
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {reservation.client?.full_name || 'Client'}
+                                  {reservation.type === 'manual' && reservation.client_full_name 
+                                    ? reservation.client_full_name 
+                                    : reservation.client?.full_name || 'Client'}
                                 </Typography>
                                 <Chip
                                   label={reservation.status === 'CONFIRMED' ? 'Confirmé' : 

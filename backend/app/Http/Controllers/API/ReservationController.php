@@ -141,27 +141,27 @@ class ReservationController extends BaseController
             'request_data' => $request->except(['password'])
         ]);
 
-        // Determine reservation type
-        $isManual = $request->has('type') && $request->type === 'manual';
         $user = auth()->user();
 
-        // Validate request data based on type
+        if (!$user) {
+            Log::error('User not authenticated');
+            return response()->json([
+                'success' => false,
+                'error' => 'User not authenticated'
+            ], 401);
+        }
+        
+        Log::info('User found for reservation', [
+            'user_id' => $user->id,
+            'user_role' => $user->role
+        ]);
+
+        // Validate request data for online reservations only
         $rules = [
             'service_id' => 'required|integer|exists:services,id',
             'employee_id' => 'nullable|integer|exists:employees,id',
-            'start_at' => 'required|date',
+            'start_at' => 'required|date|after:now', // Only allow future bookings for clients
         ];
-
-        if ($isManual && $user->role === 'OWNER') {
-            // Manual reservation by admin
-            $rules['type'] = 'required|in:manual';
-            $rules['client_full_name'] = 'required|string|max:120';
-            $rules['client_phone'] = 'required|string|max:40';
-            // Remove after:now for admin reservations
-        } else {
-            // Online reservation by client
-            $rules['start_at'] .= '|after:now';
-        }
 
         $validator = Validator::make($request->all(), $rules);
         
@@ -184,23 +184,6 @@ class ReservationController extends BaseController
             
             $service = Service::findOrFail($request->service_id);
             $salonId = $service->salon_id; // Get salon ID from the service
-            
-            // For owners, validate they can access this salon
-            if ($user->role === 'OWNER') {
-                $userSalon = $user->salon;
-                if (!$userSalon || $userSalon->id !== $salonId) {
-                    Log::warning('Owner attempted to create reservation for different salon', [
-                        'user_id' => $user->id,
-                        'user_salon_id' => $userSalon ? $userSalon->id : null,
-                        'requested_service_salon_id' => $salonId
-                    ]);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Service not found or access denied'
-                    ], 403);
-                }
-            }
             
             // If employee is specified, validate they belong to the same salon
             if ($request->employee_id) {
@@ -277,7 +260,7 @@ class ReservationController extends BaseController
                 ], 409);
             }
             
-            // Create the reservation with proper salon isolation
+            // Create the online reservation
             $reservationData = [
                 'salon_id' => $salonId, // Essential for proper isolation
                 'employee_id' => $employeeId,
@@ -285,18 +268,8 @@ class ReservationController extends BaseController
                 'start_at' => $startAt,
                 'end_at' => $endAt,
                 'status' => 'CONFIRMED',
-                'type' => $isManual ? 'manual' : 'online'
+                'client_id' => $user->id, // Online reservation by authenticated client
             ];
-
-            if ($isManual && $user->role === 'OWNER') {
-                // Manual reservation by admin
-                $reservationData['client_id'] = null; // No registered user
-                $reservationData['client_full_name'] = $request->client_full_name;
-                $reservationData['client_phone'] = $request->client_phone;
-            } else {
-                // Online reservation by authenticated client
-                $reservationData['client_id'] = auth()->id();
-            }
 
             $reservation = Reservation::create($reservationData);
             
@@ -316,8 +289,7 @@ class ReservationController extends BaseController
                 'service_id' => $request->service_id,
                 'start_at' => $startAt->toISOString(),
                 'end_at' => $endAt->toISOString(),
-                'auto_assigned_employee' => !$request->employee_id,
-                'is_manual' => $isManual
+                'auto_assigned_employee' => !$request->employee_id
             ]);
             
             return response()->json([

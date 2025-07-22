@@ -44,10 +44,9 @@ export interface WorkingHoursGroup {
  */
 export const getAllWorkingHours = async (): Promise<WorkingHoursGroup[]> => {
   try {
-    // Get authentication token (try multiple possible keys)
+    // Get authentication token (prioritize admin_token for admin service)
     const token = localStorage.getItem('admin_token') || 
                   localStorage.getItem('access_token') || 
-                  localStorage.getItem('auth_token') ||
                   localStorage.getItem('token');
 
     if (!token) {
@@ -73,10 +72,9 @@ export const getAllWorkingHours = async (): Promise<WorkingHoursGroup[]> => {
  */
 export const getEmployeeWorkingHours = async (employeeId: number): Promise<WorkingHour[]> => {
   try {
-    // Get authentication token (try multiple possible keys)
+    // Get authentication token (prioritize admin_token for admin service)
     const token = localStorage.getItem('admin_token') || 
                   localStorage.getItem('access_token') || 
-                  localStorage.getItem('auth_token') ||
                   localStorage.getItem('token');
 
     if (!token) {

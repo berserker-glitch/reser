@@ -20,6 +20,13 @@ import {
   BookingFlow,
   ClientHistory,
 } from './pages/client';
+import SalonLanding from './pages/salon/SalonLanding';
+import ServiceSelection from './pages/salon/BookingFlow/ServiceSelection';
+import EmployeeSelection from './pages/salon/BookingFlow/EmployeeSelection';
+import DateTimeSelection from './pages/salon/BookingFlow/DateTimeSelection';
+import AuthGate from './pages/salon/BookingFlow/AuthGate';
+import BookingConfirmation from './pages/salon/BookingFlow/BookingConfirmation';
+import TokenDebugger from './pages/admin/TokenDebugger';
 import { AdminLayout } from './components/admin';
 import { ClientLayout } from './components/client';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -71,6 +78,9 @@ function AppWithErrorHandling() {
             {/* Admin login route */}
             <Route path="/login" element={<AdminLogin />} />
             
+            {/* Token debugger route (temporary) */}
+            <Route path="/debug-tokens" element={<TokenDebugger />} />
+            
             {/* Client login route */}
             <Route path="/client/login" element={<ClientLogin />} />
             
@@ -91,6 +101,14 @@ function AppWithErrorHandling() {
               <Route path="booking" element={<BookingFlow />} />
               <Route path="history" element={<ClientHistory />} />
             </Route>
+            
+            {/* Salon booking flow routes (public) */}
+            <Route path="/salon/:salonSlug" element={<SalonLanding />} />
+            <Route path="/salon/:salonSlug/book/service" element={<ServiceSelection />} />
+            <Route path="/salon/:salonSlug/book/employee" element={<EmployeeSelection />} />
+            <Route path="/salon/:salonSlug/book/datetime" element={<DateTimeSelection />} />
+            <Route path="/salon/:salonSlug/book/auth" element={<AuthGate />} />
+            <Route path="/salon/:salonSlug/book/confirm" element={<BookingConfirmation />} />
             
             {/* Fallback for unknown routes */}
             <Route path="*" element={<Navigate to="/" replace />} />

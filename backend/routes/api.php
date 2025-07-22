@@ -10,6 +10,8 @@ use App\Http\Controllers\API\ReservationController;
 use App\Http\Controllers\API\EmployeeController;
 use App\Http\Controllers\API\ServiceController;
 use App\Http\Controllers\API\WorkingHourController;
+use App\Http\Controllers\API\SalonController;
+use App\Http\Controllers\API\UserSalonController;
 use App\Models\Service;
 use App\Models\WorkingHour;
 use App\Models\Salon;
@@ -639,6 +641,9 @@ Route::group([
     // Reservation management (full CRUD for owners)
     Route::apiResource('reservations', ReservationController::class);
     
+    // Manual reservation management (admin-created reservations)
+    Route::apiResource('manual-reservations', \App\Http\Controllers\API\ManualReservationController::class);
+    
     // Dashboard and statistics (salon-specific for owners)
     Route::get('/dashboard/stats', function () {
         try {
@@ -743,3 +748,34 @@ Route::group([
     // Cache management routes (Owner only)
     Route::delete('/cache/availability', [AvailabilityController::class, 'clearCache']);
 });
+
+// ============================================================================
+// NEW CLIENT BOOKING FLOW ROUTES
+// ============================================================================
+
+// Public salon discovery routes (no authentication required)
+Route::group(['prefix' => 'salon'], function () {
+    // Get salon info by slug with services, employees, working hours
+    Route::get('{slug}', [SalonController::class, 'show']);
+    
+    // Get availability for a salon/service/employee combination
+    Route::get('{slug}/availability', [SalonController::class, 'availability']);
+    
+    // Create temporary guest booking (before authentication)
+    Route::post('{slug}/book-guest', [SalonController::class, 'bookGuest']);
+});
+
+// Authenticated user-salon routes
+Route::group(['middleware' => 'auth:api', 'prefix' => 'user'], function () {
+    // Associate user with a salon
+    Route::post('salons/{salonId}', [UserSalonController::class, 'associateWithSalon']);
+    
+    // Get user's salon-specific dashboard
+    Route::get('salon/{salonId}/dashboard', [UserSalonController::class, 'dashboard']);
+    
+    // Get all salons associated with the user
+    Route::get('salons', [UserSalonController::class, 'getUserSalons']);
+});
+
+// Authenticated reservation route
+Route::middleware('auth:api')->post('reservations', [ReservationController::class, 'store']);
